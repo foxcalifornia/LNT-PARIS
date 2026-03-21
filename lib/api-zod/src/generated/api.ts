@@ -51,6 +51,7 @@ export const GetCollectionsResponseItem = zod.object({
       collectionId: zod.number(),
       couleur: zod.string(),
       quantite: zod.number(),
+      prixCentimes: zod.number(),
       createdAt: zod.string(),
     }),
   ),
@@ -83,18 +84,20 @@ export const CreateProduitBody = zod.object({
   collectionId: zod.number(),
   couleur: zod.string(),
   quantite: zod.number(),
+  prixCentimes: zod.number(),
 });
 
 /**
- * @summary Update product quantity
+ * @summary Update product quantity and/or price
  */
 export const UpdateProduitParams = zod.object({
   id: zod.coerce.number(),
 });
 
 export const UpdateProduitBody = zod.object({
-  quantite: zod.number(),
+  quantite: zod.number().optional(),
   couleur: zod.string().optional(),
+  prixCentimes: zod.number().optional(),
 });
 
 export const UpdateProduitResponse = zod.object({
@@ -102,6 +105,7 @@ export const UpdateProduitResponse = zod.object({
   collectionId: zod.number(),
   couleur: zod.string(),
   quantite: zod.number(),
+  prixCentimes: zod.number(),
   createdAt: zod.string(),
 });
 

@@ -133,7 +133,7 @@ paths:
     put:
       operationId: updateProduit
       tags: [inventory]
-      summary: Update product quantity
+      summary: Update product quantity and/or price
       parameters:
         - name: id
           in: path
@@ -268,6 +268,8 @@ components:
           type: string
         quantite:
           type: integer
+        prixCentimes:
+          type: integer
         createdAt:
           type: string
       required:
@@ -275,6 +277,7 @@ components:
         - collectionId
         - couleur
         - quantite
+        - prixCentimes
         - createdAt
 
     CollectionWithProduits:
@@ -319,10 +322,13 @@ components:
           type: string
         quantite:
           type: integer
+        prixCentimes:
+          type: integer
       required:
         - collectionId
         - couleur
         - quantite
+        - prixCentimes
 
     UpdateProduit:
       type: object
@@ -331,8 +337,8 @@ components:
           type: integer
         couleur:
           type: string
-      required:
-        - quantite
+        prixCentimes:
+          type: integer
 
     CreateVente:
       type: object
@@ -359,6 +365,8 @@ components:
           type: integer
         typePaiement:
           type: string
+        montantCentimes:
+          type: integer
         createdAt:
           type: string
       required:
@@ -366,6 +374,7 @@ components:
         - produitId
         - quantiteVendue
         - typePaiement
+        - montantCentimes
         - createdAt
 
     SuccessMessage:

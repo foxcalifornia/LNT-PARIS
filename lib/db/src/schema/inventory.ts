@@ -14,6 +14,7 @@ export const produitsTable = pgTable("produits", {
   collectionId: integer("collection_id").notNull().references(() => collectionsTable.id, { onDelete: "cascade" }),
   couleur: text("couleur").notNull(),
   quantite: integer("quantite").notNull().default(0),
+  prixCentimes: integer("prix_centimes").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -22,6 +23,7 @@ export const ventesTable = pgTable("ventes", {
   produitId: integer("produit_id").notNull().references(() => produitsTable.id, { onDelete: "cascade" }),
   quantiteVendue: integer("quantite_vendue").notNull(),
   typePaiement: text("type_paiement").notNull(),
+  montantCentimes: integer("montant_centimes").notNull().default(0),
   sessionId: integer("session_id").references(() => collectionsTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

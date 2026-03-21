@@ -10,4 +10,5 @@ export interface CreateProduit {
   collectionId: number;
   couleur: string;
   quantite: number;
+  prixCentimes: number;
 }

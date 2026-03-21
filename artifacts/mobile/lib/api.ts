@@ -39,6 +39,7 @@ export type Produit = {
   collectionId: number;
   couleur: string;
   quantite: number;
+  prixCentimes: number;
   createdAt: string;
 };
 
@@ -51,8 +52,13 @@ export type Vente = {
   produitId: number;
   quantiteVendue: number;
   typePaiement: string;
+  montantCentimes: number;
   createdAt: string;
 };
+
+export function formatPrix(centimes: number): string {
+  return `€${(centimes / 100).toFixed(2).replace(".", ",")}`;
+}
 
 export const api = {
   caisse: {
@@ -72,12 +78,12 @@ export const api = {
       }),
     deleteCollection: (id: number) =>
       request<{ message: string }>(`/collections/${id}`, { method: "DELETE" }),
-    createProduit: (data: { collectionId: number; couleur: string; quantite: number }) =>
+    createProduit: (data: { collectionId: number; couleur: string; quantite: number; prixCentimes: number }) =>
       request<Produit>("/produits", {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    updateProduit: (id: number, data: { quantite: number; couleur?: string }) =>
+    updateProduit: (id: number, data: { quantite?: number; couleur?: string; prixCentimes?: number }) =>
       request<Produit>(`/produits/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),

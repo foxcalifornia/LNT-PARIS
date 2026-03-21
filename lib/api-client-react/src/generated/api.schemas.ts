@@ -37,6 +37,7 @@ export interface Produit {
   collectionId: number;
   couleur: string;
   quantite: number;
+  prixCentimes: number;
   createdAt: string;
 }
 
@@ -57,11 +58,13 @@ export interface CreateProduit {
   collectionId: number;
   couleur: string;
   quantite: number;
+  prixCentimes: number;
 }
 
 export interface UpdateProduit {
-  quantite: number;
+  quantite?: number;
   couleur?: string;
+  prixCentimes?: number;
 }
 
 export interface CreateVente {
@@ -75,6 +78,7 @@ export interface Vente {
   produitId: number;
   quantiteVendue: number;
   typePaiement: string;
+  montantCentimes: number;
   createdAt: string;
 }
 

@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 import Colors from "@/constants/colors";
-import { type CollectionWithProduits, type Produit } from "@/lib/api";
+import { formatPrix, type CollectionWithProduits, type Produit } from "@/lib/api";
 
 const COLORS = Colors.light;
 
@@ -109,12 +109,15 @@ export function VenteModal({ visible, collections, paymentMode, onVente, onClose
                       </Text>
                       <Text style={styles.productCollection}>{p.collectionNom}</Text>
                     </View>
+                    {p.prixCentimes > 0 && (
+                      <Text style={styles.productPrice}>{formatPrix(p.prixCentimes)}</Text>
+                    )}
                     <Text style={[
                       styles.productStock,
                       p.quantite === 0 ? { color: COLORS.danger } :
                       p.quantite <= 2 ? { color: "#F59E0B" } : { color: COLORS.success }
                     ]}>
-                      {p.quantite} paire{p.quantite !== 1 ? "s" : ""}
+                      {p.quantite}p
                     </Text>
                     {selectedProduit?.id === p.id && (
                       <Feather name="check-circle" size={18} color={color} />
@@ -125,6 +128,15 @@ export function VenteModal({ visible, collections, paymentMode, onVente, onClose
                   <Text style={styles.emptyText}>Aucun produit disponible</Text>
                 )}
               </ScrollView>
+
+              {selectedProduit && selectedProduit.prixCentimes > 0 && (
+                <View style={styles.totalBanner}>
+                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={[styles.totalAmount, { color }]}>
+                    {formatPrix(selectedProduit.prixCentimes * quantite)}
+                  </Text>
+                </View>
+              )}
 
               {selectedProduit && (
                 <View style={styles.quantiteSection}>
@@ -281,9 +293,35 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
   },
+  productPrice: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.light.accent,
+  },
   productStock: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
+  },
+  totalBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.light.background,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.light.textSecondary,
+  },
+  totalAmount: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
   },
   quantiteSection: {
     paddingHorizontal: 20,

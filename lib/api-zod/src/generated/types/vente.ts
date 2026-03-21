@@ -11,5 +11,6 @@ export interface Vente {
   produitId: number;
   quantiteVendue: number;
   typePaiement: string;
+  montantCentimes: number;
   createdAt: string;
 }

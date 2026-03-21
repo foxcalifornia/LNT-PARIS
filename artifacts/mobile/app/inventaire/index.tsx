@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { api, type CollectionWithProduits, type Produit } from "@/lib/api";
+import { api, formatPrix, type CollectionWithProduits, type Produit } from "@/lib/api";
 
 const COLORS = Colors.light;
 
@@ -177,6 +177,8 @@ function CollectionCard({ collection, expanded, onToggle, onDelete }: Collection
     );
   };
 
+  const totalCA = collection.produits.reduce((s, p) => s + p.prixCentimes * p.quantite, 0);
+
   return (
     <View style={styles.collectionCard}>
       <Pressable onPress={onToggle} style={styles.collectionHeader}>
@@ -187,7 +189,7 @@ function CollectionCard({ collection, expanded, onToggle, onDelete }: Collection
           <View>
             <Text style={styles.collectionName}>{collection.nom}</Text>
             <Text style={styles.collectionMeta}>
-              {collection.produits.length} produit{collection.produits.length !== 1 ? "s" : ""} · {totalQty} paires
+              {collection.produits.length} produit{collection.produits.length !== 1 ? "s" : ""} · {totalQty} paires{totalCA > 0 ? ` · ${formatPrix(totalCA)}` : ""}
             </Text>
           </View>
         </View>
@@ -282,7 +284,12 @@ function ProduitRow({ produit, onDelete }: ProduitRowProps) {
   return (
     <View style={styles.produitRow}>
       <View style={[styles.produitDot, { backgroundColor: getColorHex(produit.couleur) }]} />
-      <Text style={styles.produitCouleur}>{produit.couleur}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.produitCouleur}>{produit.couleur}</Text>
+        {produit.prixCentimes > 0 && (
+          <Text style={styles.produitPrix}>{formatPrix(produit.prixCentimes)}</Text>
+        )}
+      </View>
       <View style={styles.produitActions}>
         {editing ? (
           <View style={styles.editRow}>
@@ -418,12 +425,14 @@ function AddProduitModal({ visible, collectionId, onClose, onSuccess }: {
 }) {
   const [couleur, setCouleur] = useState("");
   const [quantite, setQuantite] = useState("0");
+  const [prix, setPrix] = useState("");
 
   const mutation = useMutation({
     mutationFn: api.inventory.createProduit,
     onSuccess: () => {
       setCouleur("");
       setQuantite("0");
+      setPrix("");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSuccess();
     },
@@ -434,7 +443,9 @@ function AddProduitModal({ visible, collectionId, onClose, onSuccess }: {
     if (!couleur.trim()) { Alert.alert("Erreur", "La couleur est requise"); return; }
     const qty = parseInt(quantite);
     if (isNaN(qty) || qty < 0) { Alert.alert("Erreur", "Quantité invalide"); return; }
-    mutation.mutate({ collectionId, couleur: couleur.trim(), quantite: qty });
+    const prixCentimes = prix ? Math.round(parseFloat(prix.replace(",", ".")) * 100) : 0;
+    if (isNaN(prixCentimes) || prixCentimes < 0) { Alert.alert("Erreur", "Prix invalide"); return; }
+    mutation.mutate({ collectionId, couleur: couleur.trim(), quantite: qty, prixCentimes });
   };
 
   const PRESET_COLORS = ["Bleu", "Rouge", "Vert", "Noir", "Blanc", "Rose", "Jaune", "Violet", "Orange", "Gris", "Beige"];
@@ -500,6 +511,21 @@ function AddProduitModal({ visible, collectionId, onClose, onSuccess }: {
               >
                 <Feather name="plus" size={22} color={COLORS.text} />
               </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.formField}>
+            <Text style={styles.fieldLabel}>Prix (€)</Text>
+            <View style={styles.prixRow}>
+              <Text style={styles.prixSymbol}>€</Text>
+              <TextInput
+                style={[styles.fieldInput, { flex: 1, paddingLeft: 8, borderWidth: 0 }]}
+                value={prix}
+                onChangeText={setPrix}
+                placeholder="Ex: 29,99"
+                placeholderTextColor={COLORS.textSecondary}
+                keyboardType="decimal-pad"
+              />
             </View>
           </View>
 
@@ -654,8 +680,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(0,0,0,0.1)",
   },
   produitCouleur: {
-    flex: 1, fontSize: 14, fontFamily: "Inter_500Medium",
+    fontSize: 14, fontFamily: "Inter_500Medium",
     color: COLORS.text, textTransform: "capitalize",
+  },
+  produitPrix: {
+    fontSize: 11, fontFamily: "Inter_400Regular",
+    color: COLORS.accent, marginTop: 1,
   },
   produitActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   produitQty: { fontSize: 16, fontFamily: "Inter_700Bold", minWidth: 32, textAlign: "right" },
@@ -748,6 +778,21 @@ const styles = StyleSheet.create({
     fontSize: 22, fontFamily: "Inter_700Bold",
     color: COLORS.text, textAlign: "center",
     backgroundColor: COLORS.background,
+  },
+  prixRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    backgroundColor: COLORS.background,
+    paddingLeft: 14,
+    overflow: "hidden",
+  },
+  prixSymbol: {
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.accent,
   },
   formButtons: { flexDirection: "row", gap: 12, marginTop: 8 },
   formCancelBtn: {

@@ -11,5 +11,6 @@ export interface Produit {
   collectionId: number;
   couleur: string;
   quantite: number;
+  prixCentimes: number;
   createdAt: string;
 }

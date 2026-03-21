@@ -608,7 +608,7 @@ export const useCreateProduit = <
 };
 
 /**
- * @summary Update product quantity
+ * @summary Update product quantity and/or price
  */
 export const getUpdateProduitUrl = (id: number) => {
   return `/api/produits/${id}`;
@@ -672,7 +672,7 @@ export type UpdateProduitMutationBody = BodyType<UpdateProduit>;
 export type UpdateProduitMutationError = ErrorType<unknown>;
 
 /**
- * @summary Update product quantity
+ * @summary Update product quantity and/or price
  */
 export const useUpdateProduit = <
   TError = ErrorType<unknown>,

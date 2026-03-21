@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { api, type Session, type CollectionWithProduits, type Produit } from "@/lib/api";
+import { api, formatPrix, type Session, type CollectionWithProduits, type Produit } from "@/lib/api";
 import { VenteModal } from "@/components/VenteModal";
 
 const COLORS = Colors.light;
@@ -332,7 +332,12 @@ function QuickStockRow({ produit, color, onVente }: QuickStockRowProps) {
   return (
     <View style={styles.stockRow}>
       <View style={[styles.colorDot, { backgroundColor: getColorHex(produit.couleur) }]} />
-      <Text style={styles.stockRowLabel}>{produit.couleur}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.stockRowLabel}>{produit.couleur}</Text>
+        {produit.prixCentimes > 0 && (
+          <Text style={styles.stockRowPrice}>{formatPrix(produit.prixCentimes)}</Text>
+        )}
+      </View>
       <Text style={[styles.stockRowQty, isEmpty ? styles.stockEmpty : isLow ? styles.stockLow : styles.stockOk]}>
         {produit.quantite} paire{produit.quantite !== 1 ? "s" : ""}
       </Text>
@@ -599,11 +604,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.1)",
   },
   stockRowLabel: {
-    flex: 1,
     fontSize: 14,
     fontFamily: "Inter_500Medium",
     color: COLORS.text,
     textTransform: "capitalize",
+  },
+  stockRowPrice: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
   stockRowQty: {
     fontSize: 13,

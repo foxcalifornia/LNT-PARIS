@@ -7,6 +7,7 @@
  */
 
 export interface UpdateProduit {
-  quantite: number;
+  quantite?: number;
   couleur?: string;
+  prixCentimes?: number;
 }

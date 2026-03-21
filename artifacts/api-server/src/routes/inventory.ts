@@ -75,11 +75,12 @@ router.post("/produits", async (req, res) => {
 router.put("/produits/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { quantite, couleur } = req.body;
+    const { quantite, couleur, prixCentimes } = req.body;
 
-    const updateData: { quantite?: number; couleur?: string } = {};
+    const updateData: { quantite?: number; couleur?: string; prixCentimes?: number } = {};
     if (quantite !== undefined) updateData.quantite = quantite;
     if (couleur !== undefined) updateData.couleur = couleur;
+    if (prixCentimes !== undefined) updateData.prixCentimes = prixCentimes;
 
     const [produit] = await db
       .update(produitsTable)
@@ -132,7 +133,12 @@ router.post("/ventes", async (req, res) => {
       return;
     }
 
-    const [vente] = await db.insert(ventesTable).values(parsed.data).returning();
+    const montantCentimes = produit[0].prixCentimes * quantiteVendue;
+
+    const [vente] = await db.insert(ventesTable).values({
+      ...parsed.data,
+      montantCentimes,
+    }).returning();
 
     await db
       .update(produitsTable)
