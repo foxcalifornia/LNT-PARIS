@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,22 +23,46 @@ const COLORS = Colors.light;
 
 type PaymentMode = "cash" | "carte" | null;
 
+function getTodayFr() {
+  return new Date().toLocaleDateString("fr-FR");
+}
+
+function getHeureActuelle() {
+  return new Date().getHours();
+}
+
+function isCaisseHours() {
+  const h = getHeureActuelle();
+  return h >= 10 && h < 20;
+}
+
 export default function CaisseScreen() {
   const insets = useSafeAreaInsets();
   const [paymentMode, setPaymentMode] = useState<PaymentMode>(null);
   const [loading, setLoading] = useState(false);
   const [showVente, setShowVente] = useState(false);
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
+  const [manuallyClosedId, setManuallyClosedId] = useState<number | null>(null);
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({
     queryKey: ["sessions"],
     queryFn: api.caisse.getSessions,
   });
 
-  const { data: collections = [] } = useQuery({
+  const { data: collections = [], refetch: refetchCollections } = useQuery({
     queryKey: ["collections"],
     queryFn: api.inventory.getCollections,
   });
+
+  useEffect(() => {
+    if (sessions.length === 0 || currentSession || paymentMode) return;
+    const today = getTodayFr();
+    const todaySession = sessions.find((s) => s.date === today);
+    if (todaySession && todaySession.id !== manuallyClosedId) {
+      setCurrentSession(todaySession);
+      setPaymentMode(todaySession.typePaiement === "CASH" ? "cash" : "carte");
+    }
+  }, [sessions, currentSession, paymentMode, manuallyClosedId]);
 
   const openCaisse = async (mode: PaymentMode) => {
     setLoading(true);
@@ -96,10 +120,12 @@ export default function CaisseScreen() {
         typePaiement: paymentMode === "cash" ? "CASH" : "CARTE",
       });
     }
+    refetchCollections();
   };
 
   const closeCaisse = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (currentSession) setManuallyClosedId(currentSession.id);
     setPaymentMode(null);
     setCurrentSession(null);
   };
@@ -116,34 +142,48 @@ export default function CaisseScreen() {
 
       {!paymentMode ? (
         <View style={styles.selectionContent}>
-          <View style={styles.selectionHeader}>
-            <View style={styles.iconCircle}>
-              <Feather name="shopping-bag" size={32} color={COLORS.cash} />
-            </View>
-            <Text style={styles.selectionTitle}>Mode de Paiement</Text>
-            <Text style={styles.selectionSubtitle}>
-              Choisissez le mode de paiement pour cette session
-            </Text>
-          </View>
+          {isCaisseHours() ? (
+            <>
+              <View style={styles.selectionHeader}>
+                <View style={styles.iconCircle}>
+                  <Feather name="shopping-bag" size={32} color={COLORS.cash} />
+                </View>
+                <Text style={styles.selectionTitle}>Ouvrir la Caisse</Text>
+                <Text style={styles.selectionSubtitle}>
+                  Choisissez le mode de paiement pour cette session
+                </Text>
+              </View>
 
-          <View style={styles.paymentOptions}>
-            <PaymentCard
-              icon="dollar-sign"
-              label="Cash"
-              color={COLORS.cash}
-              bgColor="#ECFDF5"
-              onPress={() => openCaisse("cash")}
-              loading={loading}
-            />
-            <PaymentCard
-              icon="credit-card"
-              label="Carte Bancaire"
-              color={COLORS.card_payment}
-              bgColor="#EFF6FF"
-              onPress={() => openCaisse("carte")}
-              loading={loading}
-            />
-          </View>
+              <View style={styles.paymentOptions}>
+                <PaymentCard
+                  icon="dollar-sign"
+                  label="Cash"
+                  color={COLORS.cash}
+                  bgColor="#ECFDF5"
+                  onPress={() => openCaisse("cash")}
+                  loading={loading}
+                />
+                <PaymentCard
+                  icon="credit-card"
+                  label="Carte Bancaire"
+                  color={COLORS.card_payment}
+                  bgColor="#EFF6FF"
+                  onPress={() => openCaisse("carte")}
+                  loading={loading}
+                />
+              </View>
+            </>
+          ) : (
+            <View style={styles.closedContainer}>
+              <View style={styles.closedIcon}>
+                <Feather name="moon" size={36} color={COLORS.textSecondary} />
+              </View>
+              <Text style={styles.closedTitle}>Caisse Fermée</Text>
+              <Text style={styles.closedSubtitle}>
+                Ouverte du lundi au dimanche{"\n"}de 10h00 à 20h00
+              </Text>
+            </View>
+          )}
 
           {sessions.length > 0 && (
             <View style={styles.recentSessions}>
@@ -461,6 +501,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
+  },
+  closedContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 40,
+    gap: 14,
+  },
+  closedIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  closedTitle: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+  closedSubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
   },
   recentSessions: {
     marginTop: 32,
