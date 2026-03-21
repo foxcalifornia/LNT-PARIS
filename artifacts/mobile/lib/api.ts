@@ -56,8 +56,32 @@ export type Vente = {
   createdAt: string;
 };
 
+export type LigneVente = {
+  collection: string;
+  couleur: string;
+  quantite: number;
+  montantCentimes: number;
+  prixUnitaireCentimes: number;
+  typePaiement: string;
+};
+
+export type JourReport = {
+  date: string;
+  totalCentimes: number;
+  totalArticles: number;
+  cashCentimes: number;
+  carteCentimes: number;
+  articlesParJour: LigneVente[];
+};
+
 export function formatPrix(centimes: number): string {
   return `€${(centimes / 100).toFixed(2).replace(".", ",")}`;
+}
+
+export function formatDateLabel(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
 export const api = {
@@ -95,5 +119,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+  },
+  reporting: {
+    getDaily: () => request<JourReport[]>("/reporting/daily"),
   },
 };

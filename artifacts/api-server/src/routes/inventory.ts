@@ -152,4 +152,76 @@ router.post("/ventes", async (req, res) => {
   }
 });
 
+router.get("/reporting/daily", async (req, res) => {
+  try {
+    const ventes = await db
+      .select({
+        venteId: ventesTable.id,
+        quantiteVendue: ventesTable.quantiteVendue,
+        typePaiement: ventesTable.typePaiement,
+        montantCentimes: ventesTable.montantCentimes,
+        createdAt: ventesTable.createdAt,
+        couleur: produitsTable.couleur,
+        prixCentimes: produitsTable.prixCentimes,
+        collectionNom: collectionsTable.nom,
+      })
+      .from(ventesTable)
+      .innerJoin(produitsTable, eq(ventesTable.produitId, produitsTable.id))
+      .innerJoin(collectionsTable, eq(produitsTable.collectionId, collectionsTable.id))
+      .orderBy(desc(ventesTable.createdAt));
+
+    const dayMap = new Map<string, {
+      date: string;
+      totalCentimes: number;
+      totalArticles: number;
+      cashCentimes: number;
+      carteCentimes: number;
+      articlesParJour: {
+        collection: string;
+        couleur: string;
+        quantite: number;
+        montantCentimes: number;
+        prixUnitaireCentimes: number;
+        typePaiement: string;
+      }[];
+    }>();
+
+    for (const v of ventes) {
+      const dateKey = v.createdAt.toISOString().slice(0, 10);
+      if (!dayMap.has(dateKey)) {
+        dayMap.set(dateKey, {
+          date: dateKey,
+          totalCentimes: 0,
+          totalArticles: 0,
+          cashCentimes: 0,
+          carteCentimes: 0,
+          articlesParJour: [],
+        });
+      }
+      const day = dayMap.get(dateKey)!;
+      day.totalCentimes += v.montantCentimes;
+      day.totalArticles += v.quantiteVendue;
+      if (v.typePaiement === "CASH") {
+        day.cashCentimes += v.montantCentimes;
+      } else {
+        day.carteCentimes += v.montantCentimes;
+      }
+      day.articlesParJour.push({
+        collection: v.collectionNom,
+        couleur: v.couleur,
+        quantite: v.quantiteVendue,
+        montantCentimes: v.montantCentimes,
+        prixUnitaireCentimes: v.prixCentimes,
+        typePaiement: v.typePaiement,
+      });
+    }
+
+    const result = Array.from(dayMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+    res.json(result);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur reporting" });
+  }
+});
+
 export default router;

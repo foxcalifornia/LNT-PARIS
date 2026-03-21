@@ -16,7 +16,7 @@ import Colors from "@/constants/colors";
 
 const COLORS = Colors.light;
 
-type Section = "caisse" | "inventaire" | null;
+type Section = "caisse" | "inventaire" | "reporting" | null;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -35,6 +35,8 @@ export default function HomeScreen() {
       router.push("/caisse");
     } else if (pendingSection === "inventaire") {
       router.push("/inventaire");
+    } else if (pendingSection === "reporting") {
+      router.push("/reporting");
     }
     setPendingSection(null);
   };
@@ -75,6 +77,15 @@ export default function HomeScreen() {
           bgColor="#FDF8F0"
           onPress={() => handlePress("inventaire")}
         />
+
+        <MenuCard
+          icon="bar-chart-2"
+          title="Rapports"
+          subtitle="Ventes & chiffre d'affaires"
+          color="#8B5CF6"
+          bgColor="#F5F3FF"
+          onPress={() => handlePress("reporting")}
+        />
       </View>
 
       <View style={styles.footer}>
@@ -83,7 +94,13 @@ export default function HomeScreen() {
 
       <PasswordModal
         visible={showPassword}
-        title={pendingSection === "caisse" ? "Ouvrir la Caisse" : "Accès Inventaire"}
+        title={
+          pendingSection === "caisse"
+            ? "Ouvrir la Caisse"
+            : pendingSection === "reporting"
+            ? "Accès Rapports"
+            : "Accès Inventaire"
+        }
         onSuccess={handlePasswordSuccess}
         onCancel={handlePasswordCancel}
       />
