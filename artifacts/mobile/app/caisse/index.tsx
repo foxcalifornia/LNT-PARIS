@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -16,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { api, formatPrix, type Session, type CollectionWithProduits, type Produit } from "@/lib/api";
+import { api, type Session, type CollectionWithProduits } from "@/lib/api";
 import { VenteModal } from "@/components/VenteModal";
 import { PasswordModal } from "@/components/PasswordModal";
 import { VentesJourModal } from "@/components/VentesJourModal";
@@ -350,8 +349,7 @@ type ActiveCaisseViewProps = {
   onShowVentesJour: () => void;
 };
 
-function ActiveCaisseView({ session, collections, onClose, onShowVente, onShowInventaire, onShowVentesJour }: ActiveCaisseViewProps) {
-  const totalPaires = collections.reduce((s, c) => s + c.produits.reduce((ss, p) => ss + p.quantite, 0), 0);
+function ActiveCaisseView({ session, collections: _collections, onClose, onShowVente, onShowInventaire, onShowVentesJour }: ActiveCaisseViewProps) {
 
   return (
     <View style={styles.activeCaisse}>
@@ -384,35 +382,6 @@ function ActiveCaisseView({ session, collections, onClose, onShowVente, onShowIn
         </Pressable>
       </View>
 
-      <Text style={styles.stockHeader}>Stock Disponible · {totalPaires} paires</Text>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
-      >
-        {collections.map((col) => (
-          <View key={col.id} style={styles.colCard}>
-            <View style={styles.colHeader}>
-              <Text style={styles.colName}>{col.nom}</Text>
-              <Text style={styles.colTotal}>
-                {col.produits.reduce((s, p) => s + p.quantite, 0)} paires
-              </Text>
-            </View>
-            {col.produits.map((p) => (
-              <StockRow key={p.id} produit={p} />
-            ))}
-            {col.produits.length === 0 && (
-              <Text style={styles.emptyProducts}>Aucun produit</Text>
-            )}
-          </View>
-        ))}
-        {collections.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Aucune collection disponible</Text>
-          </View>
-        )}
-      </ScrollView>
-
       <View style={styles.bottomActions}>
         <Pressable style={styles.bottomBtn} onPress={onShowInventaire}>
           <Feather name="package" size={17} color={COLORS.accent} />
@@ -428,48 +397,6 @@ function ActiveCaisseView({ session, collections, onClose, onShowVente, onShowIn
   );
 }
 
-function StockRow({ produit }: { produit: Produit }) {
-  const isLow = produit.quantite <= 2 && produit.quantite > 0;
-  const isEmpty = produit.quantite === 0;
-
-  return (
-    <View style={styles.stockRow}>
-      <View style={[styles.colorDot, { backgroundColor: getColorHex(produit.couleur) }]} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.stockRowLabel}>{produit.couleur}</Text>
-        {produit.prixCentimes > 0 && (
-          <Text style={styles.stockRowPrice}>{formatPrix(produit.prixCentimes)}</Text>
-        )}
-      </View>
-      <Text
-        style={[
-          styles.stockRowQty,
-          isEmpty ? styles.stockEmpty : isLow ? styles.stockLow : styles.stockOk,
-        ]}
-      >
-        {produit.quantite} paire{produit.quantite !== 1 ? "s" : ""}
-      </Text>
-    </View>
-  );
-}
-
-function getColorHex(couleur: string): string {
-  const map: Record<string, string> = {
-    bleu: "#3B82F6",
-    rouge: "#EF4444",
-    vert: "#10B981",
-    noir: "#1F2937",
-    blanc: "#F9FAFB",
-    rose: "#EC4899",
-    jaune: "#F59E0B",
-    violet: "#8B5CF6",
-    orange: "#F97316",
-    gris: "#6B7280",
-    beige: "#D2B48C",
-    marron: "#92400E",
-  };
-  return map[couleur.toLowerCase()] ?? COLORS.accent;
-}
 
 const styles = StyleSheet.create({
   container: {
