@@ -9,6 +9,7 @@ export default function CaisseLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="ventes-jour" />
     </Stack>
   );
 }

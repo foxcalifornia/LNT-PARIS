@@ -20,7 +20,6 @@ import { api, formatPrix, type Session, type CollectionWithProduits } from "@/li
 import { cartTotalItems, type CartItem } from "@/lib/cart";
 import { VenteModal } from "@/components/VenteModal";
 import { PasswordModal } from "@/components/PasswordModal";
-import { VentesJourModal } from "@/components/VentesJourModal";
 import { InventaireReadonlyModal } from "@/components/InventaireReadonlyModal";
 import { PanierModal } from "@/components/PanierModal";
 
@@ -57,7 +56,6 @@ export default function CaisseScreen() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showVente, setShowVente] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showVentesJour, setShowVentesJour] = useState(false);
   const [showInventaire, setShowInventaire] = useState(false);
   const [showPanier, setShowPanier] = useState(false);
   const [openingLoading, setOpeningLoading] = useState(false);
@@ -254,7 +252,7 @@ export default function CaisseScreen() {
           onClose={closeCaisse}
           onShowVente={() => setShowVente(true)}
           onShowInventaire={() => setShowInventaire(true)}
-          onShowVentesJour={() => setShowVentesJour(true)}
+          onShowVentesJour={() => router.push("/caisse/ventes-jour")}
           onShowPanier={() => setShowPanier(true)}
           onCancelLastVente={handleCancelLastVente}
           insets={insets}
@@ -281,11 +279,6 @@ export default function CaisseScreen() {
           onClose={() => setShowVente(false)}
         />
       )}
-
-      <VentesJourModal
-        visible={showVentesJour}
-        onClose={() => setShowVentesJour(false)}
-      />
 
       <InventaireReadonlyModal
         visible={showInventaire}
