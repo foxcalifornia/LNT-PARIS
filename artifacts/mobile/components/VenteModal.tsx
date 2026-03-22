@@ -1,10 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -15,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { api, formatPrix, type CollectionWithProduits, type Produit, type SumUpReader } from "@/lib/api";
+import { formatPrix, type CollectionWithProduits, type Produit } from "@/lib/api";
 import {
   computePromo,
   type CartItem,
@@ -24,21 +22,13 @@ import {
 
 const COLORS = Colors.light;
 
-type VentePaymentStep =
-  | "oauth_checking"
-  | "oauth_authorizing"
-  | "reader_loading"
-  | "reader_waiting"
-  | "carte_confirming"
-  | null;
-
 type Props = {
   visible: boolean;
   collections: CollectionWithProduits[];
   defaultPaymentMode?: "cash" | "carte";
   cart: CartItem[];
   onCartChange: (cart: CartItem[]) => void;
-  onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte", sumupCheckoutId?: string, sumupTransactionId?: string) => Promise<void>;
+  onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte") => Promise<void>;
   onClose: () => void;
 };
 
@@ -48,12 +38,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
   const [loading, setLoading] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<VentePaymentStep>(null);
-  const [activeReader, setActiveReader] = useState<SumUpReader | null>(null);
-  const [activeCheckoutId, setActiveCheckoutId] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const color = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
@@ -61,8 +47,6 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
   const promo = computePromo(cart);
   const totalFinal = totalCentimes - promo.discountCentimes;
-
-  const cartItems = cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite }));
 
   const getCartQty = (produitId: number) =>
     cart.find((i) => i.produit.id === produitId)?.quantite ?? 0;
@@ -82,162 +66,23 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     onCartChange(newCart);
   };
 
-  const resetModal = () => {
-    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
-    setSuccess(false);
-    setSuccessSnapshot(null);
-    setPaymentStep(null);
-    setActiveReader(null);
-    setActiveCheckoutId(null);
-    setLoading(false);
-    onCartChange([]);
-    setView("collections");
-    setSelectedCollection(null);
-    setPaymentMode(defaultPaymentMode ?? null);
-    onClose();
-  };
-
-  const cancelCarte = () => {
-    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
-    setPaymentStep(null);
-    setActiveReader(null);
-    setActiveCheckoutId(null);
-    setLoading(false);
-  };
-
-  const startReaderCheckout = async (reader: SumUpReader) => {
-    setActiveReader(reader);
-    setPaymentStep("reader_waiting");
-    try {
-      const { checkoutId } = await api.sumup.createReaderCheckout(reader.id, {
-        amountCentimes: totalFinal,
-        description: `LNT Paris · ${totalItems} article${totalItems > 1 ? "s" : ""}`,
-      });
-      setActiveCheckoutId(checkoutId);
-
-      let attempts = 0;
-      pollingRef.current = setInterval(async () => {
-        attempts++;
-        try {
-          const result = await api.sumup.getReaderCheckoutStatus(reader.id, checkoutId);
-          if (result.status === "PAID" || result.status === "SUCCESSFUL") {
-            clearInterval(pollingRef.current!);
-            await onVente(cartItems, "carte", checkoutId, result.transactionId);
-            setSuccessSnapshot({ items: totalItems, total: totalFinal });
-            setSuccess(true);
-            setPaymentStep(null);
-            setActiveReader(null);
-            setActiveCheckoutId(null);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setTimeout(resetModal, 1800);
-          } else if (result.status === "FAILED" || result.status === "CANCELLED" || attempts >= 60) {
-            clearInterval(pollingRef.current!);
-            Alert.alert("Paiement non abouti", result.status === "FAILED" ? "Le paiement a échoué." : result.status === "CANCELLED" ? "Paiement annulé." : "Délai dépassé.");
-            setPaymentStep("carte_confirming");
-            setActiveReader(null);
-            setActiveCheckoutId(null);
-            setLoading(false);
-          }
-        } catch { /* continue polling */ }
-      }, 2000);
-    } catch (e) {
-      Alert.alert("Erreur terminal", e instanceof Error ? e.message : "Impossible d'envoyer au terminal.");
-      setPaymentStep("carte_confirming");
-      setActiveReader(null);
-      setLoading(false);
-    }
-  };
-
   const handleConfirm = async () => {
     if (cart.length === 0 || loading || !paymentMode) return;
-
-    if (paymentMode === "cash") {
-      setLoading(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      try {
-        await onVente(cartItems, "cash");
-        setSuccessSnapshot({ items: totalItems, total: totalFinal });
-        setSuccess(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(resetModal, 1500);
-      } catch {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // --- SumUp reader flow ---
     setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPaymentStep("oauth_checking");
     try {
-      const status = await api.sumup.getOAuthStatus();
-      if (!status.authorized) {
-        setLoading(false);
-        setPaymentStep("oauth_authorizing");
-        return;
-      }
-
-      setPaymentStep("reader_loading");
-      const { readers } = await api.sumup.listReaders();
-      if (!readers || readers.length === 0) {
-        setLoading(false);
-        setPaymentStep("carte_confirming");
-        return;
-      }
-
-      await startReaderCheckout(readers[0]);
-    } catch {
-      setLoading(false);
-      setPaymentStep("carte_confirming");
-    }
-  };
-
-  const handleOAuthAuthorize = async () => {
-    try {
-      const { url } = await api.sumup.getAuthorizeUrl();
-      await WebBrowser.openBrowserAsync(url, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-      });
-      setLoading(true);
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        try {
-          const status = await api.sumup.getOAuthStatus();
-          if (status.authorized) {
-            clearInterval(poll);
-            setPaymentStep("reader_loading");
-            const { readers } = await api.sumup.listReaders();
-            if (!readers || readers.length === 0) {
-              setLoading(false);
-              setPaymentStep("carte_confirming");
-            } else {
-              await startReaderCheckout(readers[0]);
-            }
-          } else if (attempts >= 30) {
-            clearInterval(poll);
-            setLoading(false);
-            setPaymentStep("carte_confirming");
-          }
-        } catch { if (attempts >= 30) { clearInterval(poll); setLoading(false); setPaymentStep("carte_confirming"); } }
-      }, 2000);
-    } catch {
-      setLoading(false);
-      setPaymentStep("carte_confirming");
-    }
-  };
-
-  const handleCarteConfirm = async () => {
-    if (loading) return;
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      await onVente(cartItems, "carte");
+      await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), paymentMode);
       setSuccessSnapshot({ items: totalItems, total: totalFinal });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(resetModal, 1800);
+      setTimeout(() => {
+        setSuccess(false);
+        setSuccessSnapshot(null);
+        onCartChange([]);
+        setView("collections");
+        setSelectedCollection(null);
+        setPaymentMode(defaultPaymentMode ?? null);
+        onClose();
+      }, 1500);
     } catch {
       setLoading(false);
     }
@@ -318,11 +163,6 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
               onSelectPayment={setPaymentMode}
               loading={loading}
               onConfirm={handleConfirm}
-              paymentStep={paymentStep}
-              onCarteConfirm={handleCarteConfirm}
-              onAnnulerCarte={cancelCarte}
-              onOAuthAuthorize={handleOAuthAuthorize}
-              onSkipToManual={() => setPaymentStep("carte_confirming")}
             />
           )}
         </View>
@@ -520,11 +360,6 @@ function CartFooter({
   onSelectPayment,
   loading,
   onConfirm,
-  paymentStep,
-  onCarteConfirm,
-  onAnnulerCarte,
-  onOAuthAuthorize,
-  onSkipToManual,
 }: {
   totalItems: number;
   totalCentimes: number;
@@ -534,11 +369,6 @@ function CartFooter({
   onSelectPayment: (mode: "cash" | "carte") => void;
   loading: boolean;
   onConfirm: () => void;
-  paymentStep: VentePaymentStep;
-  onCarteConfirm: () => void;
-  onAnnulerCarte: () => void;
-  onOAuthAuthorize: () => void;
-  onSkipToManual: () => void;
 }) {
   const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
   const hasPromo = promo.nbFree > 0;
@@ -611,118 +441,22 @@ function CartFooter({
         </Pressable>
       </View>
 
-      {(paymentStep === "oauth_checking" || paymentStep === "reader_loading") ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={COLORS.card_payment} size="small" />
-          <Text style={styles.loadingLabel}>
-            {paymentStep === "oauth_checking" ? "Vérification de la connexion SumUp…" : "Recherche du terminal…"}
-          </Text>
-        </View>
-      ) : paymentStep === "oauth_authorizing" ? (
-        <View style={styles.carteConfirmBox}>
-          <View style={styles.carteConfirmHeader}>
-            <View style={styles.carteConfirmIconWrap}>
-              <Feather name="wifi-off" size={20} color={COLORS.card_payment} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.carteConfirmTitle}>Terminal SumUp non connecté</Text>
-              <Text style={styles.carteConfirmInstructions}>
-                Autorisez l'accès à votre terminal pour envoyer le montant automatiquement.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.carteConfirmBtns}>
-            <Pressable style={styles.carteAnnulerBtn} onPress={onAnnulerCarte} disabled={loading}>
-              <Text style={styles.carteAnnulerText}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.carteConfirmerBtn, loading && { opacity: 0.55 }]}
-              onPress={onOAuthAuthorize}
-              disabled={loading}
-            >
-              {loading ? <ActivityIndicator color="#fff" size="small" /> : (
-                <>
-                  <Feather name="link" size={15} color="#fff" />
-                  <Text style={styles.carteConfirmerText}>Connecter SumUp</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-          <Pressable onPress={onSkipToManual}>
-            <Text style={styles.skipLink}>Encaisser manuellement à la place →</Text>
-          </Pressable>
-        </View>
-      ) : paymentStep === "reader_waiting" ? (
-        <View style={styles.carteConfirmBox}>
-          <View style={styles.carteConfirmHeader}>
-            <View style={[styles.carteConfirmIconWrap, { backgroundColor: COLORS.card_payment + "15" }]}>
-              <Feather name="credit-card" size={22} color={COLORS.card_payment} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.carteConfirmTitle}>En attente du terminal</Text>
-              <Text style={styles.carteConfirmAmount}>{formatPrix(totalFinal)}</Text>
-            </View>
-            <ActivityIndicator color={COLORS.card_payment} size="small" />
-          </View>
-          <Text style={styles.carteConfirmInstructions}>
-            Le montant a été envoyé sur votre terminal SumUp. Le paiement sera enregistré automatiquement.
-          </Text>
-          <Pressable style={styles.carteAnnulerBtn} onPress={onAnnulerCarte}>
-            <Text style={styles.carteAnnulerText}>Annuler le paiement</Text>
-          </Pressable>
-        </View>
-      ) : paymentStep === "carte_confirming" ? (
-        <View style={styles.carteConfirmBox}>
-          <View style={styles.carteConfirmHeader}>
-            <View style={styles.carteConfirmIconWrap}>
-              <Feather name="credit-card" size={22} color={COLORS.card_payment} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.carteConfirmTitle}>Paiement par carte</Text>
-              <Text style={styles.carteConfirmAmount}>{formatPrix(totalFinal)} à encaisser</Text>
-            </View>
-          </View>
-          <Text style={styles.carteConfirmInstructions}>
-            Traitez le paiement sur votre lecteur SumUp, puis appuyez sur Confirmer.
-          </Text>
-          <View style={styles.carteConfirmBtns}>
-            <Pressable style={styles.carteAnnulerBtn} onPress={onAnnulerCarte} disabled={loading}>
-              <Text style={styles.carteAnnulerText}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.carteConfirmerBtn, loading && { opacity: 0.55 }]}
-              onPress={onCarteConfirm}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Feather name="check" size={16} color="#fff" />
-                  <Text style={styles.carteConfirmerText}>Paiement effectué</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Pressable
-          style={[styles.confirmBtn, { backgroundColor: confirmColor }, (loading || !paymentMode) && { opacity: 0.45 }]}
-          onPress={onConfirm}
-          disabled={loading || !paymentMode}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Feather name="check" size={20} color="#fff" />
-              <Text style={styles.confirmText}>
-                {paymentMode ? "Confirmer la Vente" : "Choisir le mode de paiement"}
-              </Text>
-            </>
-          )}
-        </Pressable>
-      )}
+      <Pressable
+        style={[styles.confirmBtn, { backgroundColor: confirmColor }, (loading || !paymentMode) && { opacity: 0.45 }]}
+        onPress={onConfirm}
+        disabled={loading || !paymentMode}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <>
+            <Feather name="check" size={20} color="#fff" />
+            <Text style={styles.confirmText}>
+              {paymentMode ? "Confirmer la Vente" : "Choisir le mode de paiement"}
+            </Text>
+          </>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -1105,100 +839,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#fff",
     letterSpacing: -0.3,
-  },
-  carteConfirmBox: {
-    backgroundColor: COLORS.card_payment + "10",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.card_payment + "30",
-    padding: 16,
-    gap: 12,
-  },
-  carteConfirmHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  carteConfirmIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.card_payment + "20",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  carteConfirmTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: COLORS.card_payment,
-    letterSpacing: -0.2,
-  },
-  carteConfirmAmount: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: COLORS.text,
-    letterSpacing: -0.5,
-    marginTop: 2,
-  },
-  carteConfirmInstructions: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.textSecondary,
-    lineHeight: 18,
-    letterSpacing: -0.1,
-  },
-  carteConfirmBtns: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
-  carteAnnulerBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 12,
-    backgroundColor: COLORS.border + "60",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  carteAnnulerText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.textSecondary,
-  },
-  carteConfirmerBtn: {
-    flex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 13,
-    borderRadius: 12,
-    backgroundColor: COLORS.card_payment,
-  },
-  carteConfirmerText: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    letterSpacing: -0.2,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 20,
-  },
-  loadingLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.textSecondary,
-  },
-  skipLink: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.card_payment,
-    textDecorationLine: "underline",
-    textAlign: "center",
-    marginTop: -4,
   },
 });

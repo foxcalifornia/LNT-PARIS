@@ -121,8 +121,6 @@ router.post("/ventes", async (req, res) => {
     }
 
     const { produitId, quantiteVendue, typePaiement } = parsed.data;
-    const sumupCheckoutId: string | undefined = req.body.sumupCheckoutId;
-    const sumupTransactionId: string | undefined = req.body.sumupTransactionId;
 
     const produit = await db.select().from(produitsTable).where(eq(produitsTable.id, produitId)).limit(1);
     if (!produit.length) {
@@ -141,10 +139,6 @@ router.post("/ventes", async (req, res) => {
     const [vente] = await db.insert(ventesTable).values({
       ...parsed.data,
       montantCentimes,
-      sumupCheckoutId: sumupCheckoutId ?? null,
-      sumupTransactionId: sumupTransactionId ?? null,
-      paymentStatus: typePaiement === "CARTE" ? "PAID" : null,
-      paidAt: typePaiement === "CARTE" ? new Date() : null,
     }).returning();
 
     await db

@@ -1,10 +1,3 @@
-export type SumUpReader = {
-  id: string;
-  name?: string;
-  status?: string;
-  device?: { identifier?: string };
-};
-
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -144,35 +137,11 @@ export const api = {
       }),
     deleteProduit: (id: number) =>
       request<{ message: string }>(`/produits/${id}`, { method: "DELETE" }),
-    createVente: (data: { produitId: number; quantiteVendue: number; typePaiement: string; sumupCheckoutId?: string; sumupTransactionId?: string }) =>
+    createVente: (data: { produitId: number; quantiteVendue: number; typePaiement: string }) =>
       request<Vente>("/ventes", {
         method: "POST",
         body: JSON.stringify(data),
       }),
-  },
-  sumup: {
-    getOAuthStatus: () =>
-      request<{ authorized: boolean; expiresAt?: string; scope?: string }>("/caisse/sumup/oauth/status"),
-    getAuthorizeUrl: () =>
-      request<{ url: string }>("/caisse/sumup/oauth/authorize-url"),
-    revokeToken: () =>
-      request<{ success: boolean }>("/caisse/sumup/oauth/token", { method: "DELETE" }),
-    listReaders: () =>
-      request<{ readers: SumUpReader[] }>("/caisse/sumup/readers"),
-    createReaderCheckout: (readerId: string, data: { amountCentimes: number; description?: string }) =>
-      request<{ checkoutId: string; reference: string; status: string }>(`/caisse/sumup/readers/${readerId}/checkout`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
-    getReaderCheckoutStatus: (readerId: string, checkoutId: string) =>
-      request<{ status: string; checkoutId: string; transactionId?: string }>(`/caisse/sumup/readers/${readerId}/checkout/${checkoutId}`),
-    createCheckout: (data: { amountCentimes: number; description?: string }) =>
-      request<{ checkoutId: string; reference: string }>("/caisse/sumup/checkout", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
-    getCheckoutStatus: (checkoutId: string) =>
-      request<{ status: string; checkoutId: string; transactionId?: string }>(`/caisse/sumup/checkout/${checkoutId}`),
   },
   reporting: {
     getDaily: () => request<JourReport[]>("/reporting/daily"),

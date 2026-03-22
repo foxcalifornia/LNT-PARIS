@@ -24,9 +24,3 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
-
-[userenv]
-
-[userenv.shared]
-SUMUP_API_KEY = "sup_sk_3I1BjzzuCgh7ypl2JItOAAQNwvbhJYQte"
-SUMUP_MERCHANT_CODE = "MC4VDM6U"

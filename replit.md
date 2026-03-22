@@ -1,4 +1,4 @@
-# LNT Paris – Gestion de Stock
+# Workspace
 
 ## Overview
 
@@ -88,13 +88,7 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 
-Express 5 API server with routes for caisse, inventory, ventes, and SumUp payment integration.
-
-- **SumUp routes**: `POST /api/caisse/sumup/checkout` creates a checkout, `GET /api/caisse/sumup/checkout/:id` polls status
-- **Merchant code**: MC4VDM6U (LNT Paris)
-- **Env vars**: `SUMUP_API_KEY`, `SUMUP_MERCHANT_CODE`
-- **Checkout URL pattern**: `https://pay.sumup.com/b2c/{checkoutId}`
-- Ventes table stores `sumupCheckoutId`, `sumupTransactionId`, `paymentStatus`, `paidAt` for card payments
+Express 5 API server with routes for caisse, inventory, and ventes.
 
 ### `artifacts/mobile` (`@workspace/mobile`)
 

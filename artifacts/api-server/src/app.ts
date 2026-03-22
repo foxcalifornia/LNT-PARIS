@@ -2,7 +2,6 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
-import { handleOAuthCallback } from "./routes/sumup";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -29,9 +28,6 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// OAuth2 callback at root level (SumUp redirects here after authorization)
-app.get("/callback", handleOAuthCallback);
 
 app.use("/api", router);
 
