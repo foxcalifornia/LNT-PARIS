@@ -1,0 +1,13 @@
+{
+  "application_type": "web",
+  "client_id": "cc_classic_wnQZgbUvcxdepmC4GXIzE4suqNlh0",
+  "client_secret": "cc_sk_classic_SHVXmz1Ck2hbSGX3U8I2kvbDRlJDsVBE8YCQH8fn01JPF5ny9u",
+  "cors_uris": [
+    "https://lntparis.replit.app"
+  ],
+  "id": "CCCYRSG47",
+  "name": "LNT",
+  "redirect_uris": [
+    "https://lntparis.replit.app/callback"
+  ]
+}

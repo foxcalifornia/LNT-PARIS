@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -13,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { formatPrix, type CollectionWithProduits, type Produit } from "@/lib/api";
+import { api, formatPrix, type CollectionWithProduits, type Produit, type SumUpReader } from "@/lib/api";
 import {
   computePromo,
   type CartItem,
@@ -22,7 +24,13 @@ import {
 
 const COLORS = Colors.light;
 
-type VentePaymentStep = "carte_confirming" | null;
+type VentePaymentStep =
+  | "oauth_checking"
+  | "oauth_authorizing"
+  | "reader_loading"
+  | "reader_waiting"
+  | "carte_confirming"
+  | null;
 
 type Props = {
   visible: boolean;
@@ -41,8 +49,11 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
   const [loading, setLoading] = useState(false);
   const [paymentStep, setPaymentStep] = useState<VentePaymentStep>(null);
+  const [activeReader, setActiveReader] = useState<SumUpReader | null>(null);
+  const [activeCheckoutId, setActiveCheckoutId] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const color = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
@@ -50,6 +61,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
   const promo = computePromo(cart);
   const totalFinal = totalCentimes - promo.discountCentimes;
+
+  const cartItems = cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite }));
 
   const getCartQty = (produitId: number) =>
     cart.find((i) => i.produit.id === produitId)?.quantite ?? 0;
@@ -70,15 +83,69 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   };
 
   const resetModal = () => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
     setSuccess(false);
     setSuccessSnapshot(null);
     setPaymentStep(null);
+    setActiveReader(null);
+    setActiveCheckoutId(null);
     setLoading(false);
     onCartChange([]);
     setView("collections");
     setSelectedCollection(null);
     setPaymentMode(defaultPaymentMode ?? null);
     onClose();
+  };
+
+  const cancelCarte = () => {
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    setPaymentStep(null);
+    setActiveReader(null);
+    setActiveCheckoutId(null);
+    setLoading(false);
+  };
+
+  const startReaderCheckout = async (reader: SumUpReader) => {
+    setActiveReader(reader);
+    setPaymentStep("reader_waiting");
+    try {
+      const { checkoutId } = await api.sumup.createReaderCheckout(reader.id, {
+        amountCentimes: totalFinal,
+        description: `LNT Paris · ${totalItems} article${totalItems > 1 ? "s" : ""}`,
+      });
+      setActiveCheckoutId(checkoutId);
+
+      let attempts = 0;
+      pollingRef.current = setInterval(async () => {
+        attempts++;
+        try {
+          const result = await api.sumup.getReaderCheckoutStatus(reader.id, checkoutId);
+          if (result.status === "PAID" || result.status === "SUCCESSFUL") {
+            clearInterval(pollingRef.current!);
+            await onVente(cartItems, "carte", checkoutId, result.transactionId);
+            setSuccessSnapshot({ items: totalItems, total: totalFinal });
+            setSuccess(true);
+            setPaymentStep(null);
+            setActiveReader(null);
+            setActiveCheckoutId(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(resetModal, 1800);
+          } else if (result.status === "FAILED" || result.status === "CANCELLED" || attempts >= 60) {
+            clearInterval(pollingRef.current!);
+            Alert.alert("Paiement non abouti", result.status === "FAILED" ? "Le paiement a échoué." : result.status === "CANCELLED" ? "Paiement annulé." : "Délai dépassé.");
+            setPaymentStep("carte_confirming");
+            setActiveReader(null);
+            setActiveCheckoutId(null);
+            setLoading(false);
+          }
+        } catch { /* continue polling */ }
+      }, 2000);
+    } catch (e) {
+      Alert.alert("Erreur terminal", e instanceof Error ? e.message : "Impossible d'envoyer au terminal.");
+      setPaymentStep("carte_confirming");
+      setActiveReader(null);
+      setLoading(false);
+    }
   };
 
   const handleConfirm = async () => {
@@ -88,7 +155,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
       setLoading(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       try {
-        await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), "cash");
+        await onVente(cartItems, "cash");
         setSuccessSnapshot({ items: totalItems, total: totalFinal });
         setSuccess(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -99,8 +166,66 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
       return;
     }
 
+    // --- SumUp reader flow ---
+    setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPaymentStep("carte_confirming");
+    setPaymentStep("oauth_checking");
+    try {
+      const status = await api.sumup.getOAuthStatus();
+      if (!status.authorized) {
+        setLoading(false);
+        setPaymentStep("oauth_authorizing");
+        return;
+      }
+
+      setPaymentStep("reader_loading");
+      const { readers } = await api.sumup.listReaders();
+      if (!readers || readers.length === 0) {
+        setLoading(false);
+        setPaymentStep("carte_confirming");
+        return;
+      }
+
+      await startReaderCheckout(readers[0]);
+    } catch {
+      setLoading(false);
+      setPaymentStep("carte_confirming");
+    }
+  };
+
+  const handleOAuthAuthorize = async () => {
+    try {
+      const { url } = await api.sumup.getAuthorizeUrl();
+      await WebBrowser.openBrowserAsync(url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+      });
+      setLoading(true);
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const status = await api.sumup.getOAuthStatus();
+          if (status.authorized) {
+            clearInterval(poll);
+            setPaymentStep("reader_loading");
+            const { readers } = await api.sumup.listReaders();
+            if (!readers || readers.length === 0) {
+              setLoading(false);
+              setPaymentStep("carte_confirming");
+            } else {
+              await startReaderCheckout(readers[0]);
+            }
+          } else if (attempts >= 30) {
+            clearInterval(poll);
+            setLoading(false);
+            setPaymentStep("carte_confirming");
+          }
+        } catch { if (attempts >= 30) { clearInterval(poll); setLoading(false); setPaymentStep("carte_confirming"); } }
+      }, 2000);
+    } catch {
+      setLoading(false);
+      setPaymentStep("carte_confirming");
+    }
   };
 
   const handleCarteConfirm = async () => {
@@ -108,7 +233,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), "carte");
+      await onVente(cartItems, "carte");
       setSuccessSnapshot({ items: totalItems, total: totalFinal });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -195,7 +320,9 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
               onConfirm={handleConfirm}
               paymentStep={paymentStep}
               onCarteConfirm={handleCarteConfirm}
-              onAnnulerCarte={() => setPaymentStep(null)}
+              onAnnulerCarte={cancelCarte}
+              onOAuthAuthorize={handleOAuthAuthorize}
+              onSkipToManual={() => setPaymentStep("carte_confirming")}
             />
           )}
         </View>
@@ -396,6 +523,8 @@ function CartFooter({
   paymentStep,
   onCarteConfirm,
   onAnnulerCarte,
+  onOAuthAuthorize,
+  onSkipToManual,
 }: {
   totalItems: number;
   totalCentimes: number;
@@ -408,6 +537,8 @@ function CartFooter({
   paymentStep: VentePaymentStep;
   onCarteConfirm: () => void;
   onAnnulerCarte: () => void;
+  onOAuthAuthorize: () => void;
+  onSkipToManual: () => void;
 }) {
   const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
   const hasPromo = promo.nbFree > 0;
@@ -480,7 +611,67 @@ function CartFooter({
         </Pressable>
       </View>
 
-      {paymentStep === "carte_confirming" ? (
+      {(paymentStep === "oauth_checking" || paymentStep === "reader_loading") ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={COLORS.card_payment} size="small" />
+          <Text style={styles.loadingLabel}>
+            {paymentStep === "oauth_checking" ? "Vérification de la connexion SumUp…" : "Recherche du terminal…"}
+          </Text>
+        </View>
+      ) : paymentStep === "oauth_authorizing" ? (
+        <View style={styles.carteConfirmBox}>
+          <View style={styles.carteConfirmHeader}>
+            <View style={styles.carteConfirmIconWrap}>
+              <Feather name="wifi-off" size={20} color={COLORS.card_payment} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.carteConfirmTitle}>Terminal SumUp non connecté</Text>
+              <Text style={styles.carteConfirmInstructions}>
+                Autorisez l'accès à votre terminal pour envoyer le montant automatiquement.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.carteConfirmBtns}>
+            <Pressable style={styles.carteAnnulerBtn} onPress={onAnnulerCarte} disabled={loading}>
+              <Text style={styles.carteAnnulerText}>Annuler</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.carteConfirmerBtn, loading && { opacity: 0.55 }]}
+              onPress={onOAuthAuthorize}
+              disabled={loading}
+            >
+              {loading ? <ActivityIndicator color="#fff" size="small" /> : (
+                <>
+                  <Feather name="link" size={15} color="#fff" />
+                  <Text style={styles.carteConfirmerText}>Connecter SumUp</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+          <Pressable onPress={onSkipToManual}>
+            <Text style={styles.skipLink}>Encaisser manuellement à la place →</Text>
+          </Pressable>
+        </View>
+      ) : paymentStep === "reader_waiting" ? (
+        <View style={styles.carteConfirmBox}>
+          <View style={styles.carteConfirmHeader}>
+            <View style={[styles.carteConfirmIconWrap, { backgroundColor: COLORS.card_payment + "15" }]}>
+              <Feather name="credit-card" size={22} color={COLORS.card_payment} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.carteConfirmTitle}>En attente du terminal</Text>
+              <Text style={styles.carteConfirmAmount}>{formatPrix(totalFinal)}</Text>
+            </View>
+            <ActivityIndicator color={COLORS.card_payment} size="small" />
+          </View>
+          <Text style={styles.carteConfirmInstructions}>
+            Le montant a été envoyé sur votre terminal SumUp. Le paiement sera enregistré automatiquement.
+          </Text>
+          <Pressable style={styles.carteAnnulerBtn} onPress={onAnnulerCarte}>
+            <Text style={styles.carteAnnulerText}>Annuler le paiement</Text>
+          </Pressable>
+        </View>
+      ) : paymentStep === "carte_confirming" ? (
         <View style={styles.carteConfirmBox}>
           <View style={styles.carteConfirmHeader}>
             <View style={styles.carteConfirmIconWrap}>
@@ -989,5 +1180,25 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#fff",
     letterSpacing: -0.2,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+  loadingLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+  },
+  skipLink: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.card_payment,
+    textDecorationLine: "underline",
+    textAlign: "center",
+    marginTop: -4,
   },
 });
