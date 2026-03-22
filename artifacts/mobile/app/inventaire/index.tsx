@@ -5,7 +5,9 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -592,7 +594,11 @@ function AddCollectionModal({ visible, onClose, onSuccess }: {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
         <View style={styles.formSheet}>
           <View style={styles.handle} />
           <Text style={styles.formTitle}>Nouvelle Collection</Text>
@@ -606,6 +612,7 @@ function AddCollectionModal({ visible, onClose, onSuccess }: {
               placeholder="Ex: Santorini, Riviera..."
               placeholderTextColor={COLORS.textSecondary}
               autoFocus
+              returnKeyType="next"
             />
           </View>
 
@@ -619,6 +626,7 @@ function AddCollectionModal({ visible, onClose, onSuccess }: {
               placeholderTextColor={COLORS.textSecondary}
               multiline
               numberOfLines={3}
+              returnKeyType="done"
             />
           </View>
 
@@ -635,7 +643,7 @@ function AddCollectionModal({ visible, onClose, onSuccess }: {
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -675,97 +683,105 @@ function AddProduitModal({ visible, collectionId, onClose, onSuccess }: {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
         <View style={styles.formSheet}>
           <View style={styles.handle} />
           <Text style={styles.formTitle}>Nouveau Produit</Text>
 
-          <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>Couleur *</Text>
-            <TextInput
-              style={styles.fieldInput}
-              value={couleur}
-              onChangeText={setCouleur}
-              placeholder="Ex: Bleu, Rouge, Vert..."
-              placeholderTextColor={COLORS.textSecondary}
-              autoFocus
-            />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {PRESET_COLORS.map((c) => (
-                  <Pressable
-                    key={c}
-                    style={[
-                      styles.colorChip,
-                      couleur.toLowerCase() === c.toLowerCase() && { backgroundColor: COLORS.accent + "20", borderColor: COLORS.accent }
-                    ]}
-                    onPress={() => { Haptics.selectionAsync(); setCouleur(c); }}
-                  >
-                    <View style={[styles.colorChipDot, { backgroundColor: getColorHex(c) }]} />
-                    <Text style={[styles.colorChipText, couleur.toLowerCase() === c.toLowerCase() && { color: COLORS.accent }]}>
-                      {c}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-
-          <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>Quantité initiale</Text>
-            <View style={styles.qtyRow}>
-              <Pressable
-                style={[styles.qtyBtnLg, parseInt(quantite) <= 0 && styles.btnDisabled]}
-                onPress={() => { Haptics.selectionAsync(); setQuantite(q => String(Math.max(0, parseInt(q) - 1))); }}
-                disabled={parseInt(quantite) <= 0}
-              >
-                <Feather name="minus" size={22} color={parseInt(quantite) <= 0 ? COLORS.textSecondary : COLORS.text} />
-              </Pressable>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Couleur *</Text>
               <TextInput
-                style={styles.qtyInputLg}
-                value={quantite}
-                onChangeText={setQuantite}
-                keyboardType="number-pad"
-                textAlign="center"
-              />
-              <Pressable
-                style={styles.qtyBtnLg}
-                onPress={() => { Haptics.selectionAsync(); setQuantite(q => String(parseInt(q) + 1)); }}
-              >
-                <Feather name="plus" size={22} color={COLORS.text} />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>Prix (€)</Text>
-            <View style={styles.prixRow}>
-              <Text style={styles.prixSymbol}>€</Text>
-              <TextInput
-                style={[styles.fieldInput, { flex: 1, paddingLeft: 8, borderWidth: 0 }]}
-                value={prix}
-                onChangeText={setPrix}
-                placeholder="Ex: 29,99"
+                style={styles.fieldInput}
+                value={couleur}
+                onChangeText={setCouleur}
+                placeholder="Ex: Bleu, Rouge, Vert..."
                 placeholderTextColor={COLORS.textSecondary}
-                keyboardType="decimal-pad"
+                autoFocus
+                returnKeyType="next"
               />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {PRESET_COLORS.map((c) => (
+                    <Pressable
+                      key={c}
+                      style={[
+                        styles.colorChip,
+                        couleur.toLowerCase() === c.toLowerCase() && { backgroundColor: COLORS.accent + "20", borderColor: COLORS.accent }
+                      ]}
+                      onPress={() => { Haptics.selectionAsync(); setCouleur(c); }}
+                    >
+                      <View style={[styles.colorChipDot, { backgroundColor: getColorHex(c) }]} />
+                      <Text style={[styles.colorChipText, couleur.toLowerCase() === c.toLowerCase() && { color: COLORS.accent }]}>
+                        {c}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
-          </View>
 
-          <View style={styles.formButtons}>
-            <Pressable style={styles.formCancelBtn} onPress={onClose}>
-              <Text style={styles.formCancelText}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.formConfirmBtn, (!couleur.trim() || mutation.isPending) && styles.btnDisabled]}
-              onPress={handleSave}
-              disabled={!couleur.trim() || mutation.isPending}
-            >
-              {mutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.formConfirmText}>Ajouter</Text>}
-            </Pressable>
-          </View>
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Quantité initiale</Text>
+              <View style={styles.qtyRow}>
+                <Pressable
+                  style={[styles.qtyBtnLg, parseInt(quantite) <= 0 && styles.btnDisabled]}
+                  onPress={() => { Haptics.selectionAsync(); setQuantite(q => String(Math.max(0, parseInt(q) - 1))); }}
+                  disabled={parseInt(quantite) <= 0}
+                >
+                  <Feather name="minus" size={22} color={parseInt(quantite) <= 0 ? COLORS.textSecondary : COLORS.text} />
+                </Pressable>
+                <TextInput
+                  style={styles.qtyInputLg}
+                  value={quantite}
+                  onChangeText={setQuantite}
+                  keyboardType="number-pad"
+                  textAlign="center"
+                />
+                <Pressable
+                  style={styles.qtyBtnLg}
+                  onPress={() => { Haptics.selectionAsync(); setQuantite(q => String(parseInt(q) + 1)); }}
+                >
+                  <Feather name="plus" size={22} color={COLORS.text} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>Prix (€)</Text>
+              <View style={styles.prixRow}>
+                <Text style={styles.prixSymbol}>€</Text>
+                <TextInput
+                  style={[styles.fieldInput, { flex: 1, paddingLeft: 8, borderWidth: 0 }]}
+                  value={prix}
+                  onChangeText={setPrix}
+                  placeholder="Ex: 29,99"
+                  placeholderTextColor={COLORS.textSecondary}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formButtons}>
+              <Pressable style={styles.formCancelBtn} onPress={onClose}>
+                <Text style={styles.formCancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.formConfirmBtn, (!couleur.trim() || mutation.isPending) && styles.btnDisabled]}
+                onPress={handleSave}
+                disabled={!couleur.trim() || mutation.isPending}
+              >
+                {mutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.formConfirmText}>Ajouter</Text>}
+              </Pressable>
+            </View>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
