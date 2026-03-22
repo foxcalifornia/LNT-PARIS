@@ -1,0 +1,86 @@
+Améliorer l’écran de la section “Caisse” en ajoutant des informations utiles pour le vendeur.
+
+Objectif :
+Donner au vendeur des informations rapides et pratiques directement sur l’écran caisse sans compliquer l’interface.
+
+1. Améliorer l’information d’ouverture de caisse
+
+Dans la carte “Caisse ouverte”, afficher clairement :
+
+- l’heure exacte d’ouverture de la caisse
+- la durée depuis l’ouverture de la caisse
+
+Exemple d’affichage :
+Caisse ouverte  
+Ouverture : 11:45  
+Caisse ouverte depuis : 2h15
+
+Ces informations doivent se mettre à jour automatiquement en temps réel.
+
+2. Afficher la dernière vente
+
+Ajouter une section appelée **“Dernière vente”** sous le bloc “Total caisse en temps réel”.
+
+Afficher :
+- l’heure de la dernière vente
+- le montant de la vente
+- le mode de paiement (cash ou carte)
+
+Exemple :
+
+Dernière vente  
+11:58 — €39  
+Paiement : Carte
+
+Objectif :
+Permettre au vendeur de vérifier rapidement la dernière transaction.
+
+3. Afficher le nombre de paires vendues aujourd’hui
+
+Ajouter une petite section appelée **“Paires vendues aujourd’hui”**.
+
+Afficher :
+- le nombre total de paires vendues depuis l’ouverture de la caisse du jour.
+
+Exemple :
+
+Paires vendues aujourd’hui : 7
+
+Cette information doit être calculée automatiquement à partir des ventes enregistrées.
+
+4. Ajouter un bouton “Annuler dernière vente”
+
+Ajouter un bouton visible appelé **“Annuler dernière vente”**.
+
+Comportement :
+- ce bouton annule uniquement la dernière vente enregistrée
+- remettre automatiquement les produits de cette vente dans le stock
+- mettre à jour immédiatement :
+  - le total caisse
+  - le nombre de ventes
+  - les paires vendues
+  - la section “Dernière vente”
+
+Sécurité :
+- demander une confirmation avant d’annuler la vente
+
+Exemple :
+“Êtes-vous sûr de vouloir annuler la dernière vente ?”
+
+Objectif :
+Permettre de corriger rapidement une erreur de vente en caisse.
+
+5. Interface
+
+Ces nouvelles informations doivent rester simples et bien organisées pour ne pas surcharger l’écran.
+
+Ordre recommandé sur l’écran caisse :
+
+- Caisse ouverte (heure + durée)
+- Bouton Faire une vente
+- Total caisse en temps réel
+- Paires vendues aujourd’hui
+- Dernière vente
+- Bouton Annuler dernière vente
+
+L’interface doit rester claire, rapide à lire et adaptée à une utilisation en boutique.

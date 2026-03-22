@@ -113,6 +113,8 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getVentesJour: () => request<VentesJour>("/caisse/today"),
+    cancelLastVente: () =>
+      request<{ cancelled: number; message: string }>("/caisse/ventes/last", { method: "DELETE" }),
   },
   inventory: {
     getCollections: () => request<CollectionWithProduits[]>("/collections"),

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { sessionsTable, insertSessionSchema } from "@workspace/db/schema";
 import { ventesTable, produitsTable, collectionsTable } from "@workspace/db/schema";
-import { desc, gte, eq } from "drizzle-orm";
+import { desc, gte, eq, and, lte } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -84,6 +84,52 @@ router.get("/today", async (req, res) => {
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Erreur lors de la récupération des ventes" });
+  }
+});
+
+router.delete("/ventes/last", async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+
+    const allVentesToday = await db
+      .select()
+      .from(ventesTable)
+      .where(gte(ventesTable.createdAt, startOfDay))
+      .orderBy(desc(ventesTable.createdAt));
+
+    if (allVentesToday.length === 0) {
+      res.status(404).json({ error: "Aucune vente à annuler aujourd'hui" });
+      return;
+    }
+
+    const lastVente = allVentesToday[0];
+    const lastTime = lastVente.createdAt.getTime();
+    const windowMs = 15000;
+
+    const transactionVentes = allVentesToday.filter((v) => {
+      const ts = v.createdAt.getTime();
+      return lastTime - ts <= windowMs && v.typePaiement === lastVente.typePaiement;
+    });
+
+    for (const vente of transactionVentes) {
+      const [current] = await db
+        .select({ quantite: produitsTable.quantite })
+        .from(produitsTable)
+        .where(eq(produitsTable.id, vente.produitId));
+      if (current) {
+        await db
+          .update(produitsTable)
+          .set({ quantite: current.quantite + vente.quantiteVendue })
+          .where(eq(produitsTable.id, vente.produitId));
+      }
+      await db.delete(ventesTable).where(eq(ventesTable.id, vente.id));
+    }
+
+    res.json({ cancelled: transactionVentes.length, message: "Vente annulée avec succès" });
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de l'annulation de la vente" });
   }
 });
 

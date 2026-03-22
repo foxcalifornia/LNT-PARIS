@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -174,6 +175,31 @@ export default function CaisseScreen() {
     queryClient.invalidateQueries({ queryKey: ["ventesJour"] });
   };
 
+  const handleCancelLastVente = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      "Annuler la dernière vente ?",
+      "Cette action est irréversible. Les produits seront remis en stock et le total mis à jour.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Confirmer l'annulation",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.caisse.cancelLastVente();
+              refetchCollections();
+              queryClient.invalidateQueries({ queryKey: ["ventesJour"] });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err: any) {
+              Alert.alert("Erreur", err.message ?? "Impossible d'annuler la vente");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const closeCaisse = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
@@ -225,6 +251,7 @@ export default function CaisseScreen() {
           onShowInventaire={() => setShowInventaire(true)}
           onShowVentesJour={() => setShowVentesJour(true)}
           onShowPanier={() => setShowPanier(true)}
+          onCancelLastVente={handleCancelLastVente}
           insets={insets}
         />
       )}
@@ -361,8 +388,21 @@ type ActiveCaisseViewProps = {
   onShowInventaire: () => void;
   onShowVentesJour: () => void;
   onShowPanier: () => void;
+  onCancelLastVente: () => void;
   insets: { bottom: number };
 };
+
+function getSessionDuration(heure: string, now: Date): string {
+  const [h, m] = heure.split(":").map(Number);
+  const openMinutes = h * 60 + m;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const diff = Math.max(0, currentMinutes - openMinutes);
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  if (hours > 0 && mins > 0) return `${hours}h${mins < 10 ? "0" : ""}${mins}`;
+  if (hours > 0) return `${hours}h00`;
+  return `${mins} min`;
+}
 
 function ActiveCaisseView({
   session,
@@ -372,9 +412,16 @@ function ActiveCaisseView({
   onShowInventaire,
   onShowVentesJour,
   onShowPanier,
+  onCancelLastVente,
   insets,
 }: ActiveCaisseViewProps) {
   const cartCount = cartTotalItems(cart);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const { data: ventesJour } = useQuery({
     queryKey: ["ventesJour"],
@@ -383,18 +430,30 @@ function ActiveCaisseView({
   });
 
   const nbVentes = ventesJour?.transactions?.length ?? 0;
+  const dernièreVente = ventesJour?.transactions?.[0] ?? null;
+  const pairesVendues = ventesJour?.transactions?.reduce(
+    (total, t) => total + t.articles.reduce((s, a) => s + a.quantiteVendue, 0),
+    0
+  ) ?? 0;
+
+  const duration = session ? getSessionDuration(session.heure, now) : null;
 
   return (
     <View style={styles.activeCaisse}>
       <View style={styles.sessionBanner}>
         <View style={styles.sessionBannerLeft}>
           <View style={styles.openDot} />
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.sessionBannerTitle}>Caisse Ouverte</Text>
             {session && (
               <Text style={styles.sessionBannerSub}>
-                Depuis {session.heure}
-                {session.localisation ? `  ·  ${session.localisation}` : ""}
+                Ouverture : {session.heure}
+                {duration ? `  ·  ${duration}` : ""}
+              </Text>
+            )}
+            {session?.localisation && (
+              <Text style={[styles.sessionBannerSub, { marginTop: 1 }]} numberOfLines={1}>
+                {session.localisation}
               </Text>
             )}
           </View>
@@ -404,50 +463,116 @@ function ActiveCaisseView({
         </Pressable>
       </View>
 
-      <View style={styles.activeActions}>
-        <Pressable style={styles.fairVenteBtn} onPress={onShowVente}>
-          <Feather name="plus-circle" size={22} color="#fff" />
-          <Text style={styles.fairVenteBtnText}>Faire une vente</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.totauxPanel}>
-        <View style={styles.totauxHeader}>
-          <Feather name="activity" size={14} color={COLORS.accent} />
-          <Text style={styles.totauxTitle}>Total caisse en temps réel</Text>
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 16 }}
+      >
+        <View style={styles.activeActions}>
+          <Pressable style={styles.fairVenteBtn} onPress={onShowVente}>
+            <Feather name="plus-circle" size={22} color="#fff" />
+            <Text style={styles.fairVenteBtnText}>Faire une vente</Text>
+          </Pressable>
         </View>
-        <View style={styles.totauxGrid}>
-          <View style={styles.totauxCell}>
-            <Text style={styles.totauxCellLabel}>Cash</Text>
-            <Text style={[styles.totauxCellValue, { color: COLORS.cash }]}>
-              {ventesJour ? formatPrix(ventesJour.totalCash) : "—"}
-            </Text>
+
+        <View style={styles.totauxPanel}>
+          <View style={styles.totauxHeader}>
+            <Feather name="activity" size={14} color={COLORS.accent} />
+            <Text style={styles.totauxTitle}>Total caisse en temps réel</Text>
           </View>
-          <View style={styles.totauxCellDivider} />
-          <View style={styles.totauxCell}>
-            <Text style={styles.totauxCellLabel}>Carte</Text>
-            <Text style={[styles.totauxCellValue, { color: COLORS.card_payment }]}>
-              {ventesJour ? formatPrix(ventesJour.totalCarte) : "—"}
-            </Text>
-          </View>
-          <View style={styles.totauxCellDivider} />
-          <View style={styles.totauxCell}>
-            <Text style={styles.totauxCellLabel}>Total</Text>
-            <Text style={[styles.totauxCellValue, { color: COLORS.accent }]}>
-              {ventesJour ? formatPrix(ventesJour.total) : "—"}
-            </Text>
-          </View>
-          <View style={styles.totauxCellDivider} />
-          <View style={styles.totauxCell}>
-            <Text style={styles.totauxCellLabel}>Ventes</Text>
-            <Text style={[styles.totauxCellValue, { color: COLORS.text }]}>
-              {nbVentes}
-            </Text>
+          <View style={styles.totauxGrid}>
+            <View style={styles.totauxCell}>
+              <Text style={styles.totauxCellLabel}>Cash</Text>
+              <Text style={[styles.totauxCellValue, { color: COLORS.cash }]}>
+                {ventesJour ? formatPrix(ventesJour.totalCash) : "—"}
+              </Text>
+            </View>
+            <View style={styles.totauxCellDivider} />
+            <View style={styles.totauxCell}>
+              <Text style={styles.totauxCellLabel}>Carte</Text>
+              <Text style={[styles.totauxCellValue, { color: COLORS.card_payment }]}>
+                {ventesJour ? formatPrix(ventesJour.totalCarte) : "—"}
+              </Text>
+            </View>
+            <View style={styles.totauxCellDivider} />
+            <View style={styles.totauxCell}>
+              <Text style={styles.totauxCellLabel}>Total</Text>
+              <Text style={[styles.totauxCellValue, { color: COLORS.accent }]}>
+                {ventesJour ? formatPrix(ventesJour.total) : "—"}
+              </Text>
+            </View>
+            <View style={styles.totauxCellDivider} />
+            <View style={styles.totauxCell}>
+              <Text style={styles.totauxCellLabel}>Ventes</Text>
+              <Text style={[styles.totauxCellValue, { color: COLORS.text }]}>
+                {nbVentes}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={{ flex: 1 }} />
+        <View style={styles.infoRow}>
+          <View style={styles.pairesCard}>
+            <Feather name="shopping-bag" size={18} color={COLORS.accent} />
+            <View>
+              <Text style={styles.pairesLabel}>Paires vendues aujourd'hui</Text>
+              <Text style={styles.pairesValue}>{pairesVendues}</Text>
+            </View>
+          </View>
+        </View>
+
+        {dernièreVente && (
+          <View style={styles.derniereVenteCard}>
+            <View style={styles.derniereVenteHeader}>
+              <Feather name="clock" size={14} color={COLORS.textSecondary} />
+              <Text style={styles.derniereVenteTitle}>Dernière vente</Text>
+            </View>
+            <View style={styles.derniereVenteBody}>
+              <View style={styles.derniereVenteLeft}>
+                <Text style={styles.derniereVenteHeure}>{dernièreVente.heure}</Text>
+                {dernièreVente.articles.slice(0, 2).map((a, i) => (
+                  <Text key={i} style={styles.derniereVenteArticle} numberOfLines={1}>
+                    {a.quantiteVendue > 1 ? `${a.quantiteVendue}× ` : ""}{a.collectionNom} – {a.couleur}
+                  </Text>
+                ))}
+                {dernièreVente.articles.length > 2 && (
+                  <Text style={styles.derniereVenteArticle}>
+                    +{dernièreVente.articles.length - 2} autre{dernièreVente.articles.length - 2 > 1 ? "s" : ""}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.derniereVenteRight}>
+                <Text style={styles.derniereVenteMontant}>{formatPrix(dernièreVente.montantCentimes)}</Text>
+                <View style={[
+                  styles.derniereVenteMode,
+                  { backgroundColor: dernièreVente.typePaiement === "CASH" ? COLORS.cash + "18" : COLORS.card_payment + "18" }
+                ]}>
+                  <Feather
+                    name={dernièreVente.typePaiement === "CASH" ? "dollar-sign" : "credit-card"}
+                    size={12}
+                    color={dernièreVente.typePaiement === "CASH" ? COLORS.cash : COLORS.card_payment}
+                  />
+                  <Text style={[
+                    styles.derniereVenteModeText,
+                    { color: dernièreVente.typePaiement === "CASH" ? COLORS.cash : COLORS.card_payment }
+                  ]}>
+                    {dernièreVente.typePaiement === "CASH" ? "Cash" : "Carte"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {nbVentes > 0 && (
+          <View style={{ paddingHorizontal: 20, marginTop: 4 }}>
+            <Pressable style={styles.cancelBtn} onPress={onCancelLastVente}>
+              <Feather name="rotate-ccw" size={15} color={COLORS.danger} />
+              <Text style={styles.cancelBtnText}>Annuler la dernière vente</Text>
+            </Pressable>
+          </View>
+        )}
+      </ScrollView>
 
       <View style={[styles.stickyBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Pressable style={styles.stickyBtn} onPress={onShowInventaire}>
@@ -841,5 +966,116 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_700Bold",
     color: "#fff",
+  },
+
+  infoRow: {
+    paddingHorizontal: 20,
+    marginTop: 12,
+  },
+  pairesCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  pairesLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  pairesValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.accent,
+    marginTop: 1,
+  },
+
+  derniereVenteCard: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+  },
+  derniereVenteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  derniereVenteTitle: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  derniereVenteBody: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  derniereVenteLeft: {
+    flex: 1,
+    gap: 3,
+  },
+  derniereVenteHeure: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+    letterSpacing: -0.3,
+  },
+  derniereVenteArticle: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    textTransform: "capitalize",
+  },
+  derniereVenteRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  derniereVenteMontant: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.accent,
+    letterSpacing: -0.5,
+  },
+  derniereVenteMode: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  derniereVenteModeText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+  },
+
+  cancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: COLORS.danger + "10",
+    borderWidth: 1.5,
+    borderColor: COLORS.danger + "30",
+    marginTop: 12,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.danger,
   },
 });
