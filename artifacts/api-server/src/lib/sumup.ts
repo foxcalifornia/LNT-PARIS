@@ -73,7 +73,13 @@ export async function createSumUpCheckout(opts: {
 
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`SumUp createCheckout error ${res.status}: ${txt}`);
+    if (res.status === 403) {
+      throw new Error("Permissions SumUp insuffisantes. Activez le scope « payments » dans votre application SumUp (developer.sumup.com).");
+    }
+    if (res.status === 401) {
+      throw new Error("Identifiants SumUp invalides. Vérifiez SUMUP_CLIENT_ID et SUMUP_CLIENT_SECRET.");
+    }
+    throw new Error(`Erreur SumUp (${res.status}) : ${txt}`);
   }
 
   return res.json() as Promise<{ id: string; checkout_reference: string; status: string }>;

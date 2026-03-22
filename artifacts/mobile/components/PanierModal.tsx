@@ -279,17 +279,28 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     }
 
     if (terminalState === "failed" || terminalState === "cancelled") {
+      const isPermissionsError = terminalError?.toLowerCase().includes("permissions") || terminalError?.toLowerCase().includes("scope");
+      const displayMessage = isPermissionsError
+        ? "L'application SumUp n'a pas les droits nécessaires pour créer un paiement. Activez le scope « payments » sur developer.sumup.com."
+        : (terminalError ?? "Le paiement n'a pas abouti. Le panier est conservé.");
+
       return (
         <View style={styles.terminalContainer}>
           <View style={[styles.terminalIcon, { backgroundColor: COLORS.danger + "15" }]}>
-            <Feather name="alert-circle" size={42} color={COLORS.danger} />
+            <Feather name={isPermissionsError ? "lock" : "alert-circle"} size={42} color={COLORS.danger} />
           </View>
           <Text style={[styles.terminalTitle, { color: COLORS.danger }]}>
-            {terminalState === "cancelled" ? "Paiement annulé" : "Paiement échoué"}
+            {terminalState === "cancelled" ? "Paiement annulé" : isPermissionsError ? "Configuration requise" : "Paiement échoué"}
           </Text>
-          <Text style={styles.terminalSub}>
-            {terminalError ?? "Le paiement n'a pas abouti. Le panier est conservé."}
-          </Text>
+          <ScrollView
+            style={{ maxHeight: 120, width: "100%" }}
+            contentContainerStyle={{ paddingHorizontal: 4 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={[styles.terminalSub, { textAlign: "center" }]}>
+              {displayMessage}
+            </Text>
+          </ScrollView>
           <Pressable style={styles.terminalRetryBtn} onPress={handleRetryOrBack}>
             <Feather name="arrow-left" size={16} color={COLORS.card_payment} />
             <Text style={styles.terminalRetryText}>Retour au panier</Text>
