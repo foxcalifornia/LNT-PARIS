@@ -21,6 +21,56 @@ type CartItem = {
   quantite: number;
 };
 
+type FreeDetail = {
+  produitId: number;
+  couleur: string;
+  collectionNom: string;
+  prixCentimes: number;
+  count: number;
+};
+
+type PromoResult = {
+  nbFree: number;
+  discountCentimes: number;
+  freeDetails: FreeDetail[];
+};
+
+function computePromo(cart: CartItem[]): PromoResult {
+  const units: { produitId: number; couleur: string; collectionNom: string; prixCentimes: number }[] = [];
+  for (const item of cart) {
+    for (let i = 0; i < item.quantite; i++) {
+      units.push({
+        produitId: item.produit.id,
+        couleur: item.produit.couleur,
+        collectionNom: item.produit.collectionNom,
+        prixCentimes: item.produit.prixCentimes,
+      });
+    }
+  }
+
+  const totalUnits = units.length;
+  const nbFree = Math.floor(totalUnits / 3);
+  if (nbFree === 0) return { nbFree: 0, discountCentimes: 0, freeDetails: [] };
+
+  units.sort((a, b) => a.prixCentimes - b.prixCentimes);
+
+  const freeUnits = units.slice(0, nbFree);
+
+  const discountCentimes = freeUnits.reduce((s, u) => s + u.prixCentimes, 0);
+
+  const freeMap = new Map<number, FreeDetail>();
+  for (const u of freeUnits) {
+    const existing = freeMap.get(u.produitId);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      freeMap.set(u.produitId, { ...u, count: 1 });
+    }
+  }
+
+  return { nbFree, discountCentimes, freeDetails: Array.from(freeMap.values()) };
+}
+
 type Props = {
   visible: boolean;
   collections: CollectionWithProduits[];
@@ -36,11 +86,14 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
 
   const color = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
   const totalItems = cart.reduce((sum, i) => sum + i.quantite, 0);
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
+  const promo = computePromo(cart);
+  const totalFinal = totalCentimes - promo.discountCentimes;
 
   const getCartQty = (produitId: number) =>
     cart.find((i) => i.produit.id === produitId)?.quantite ?? 0;
@@ -61,10 +114,12 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
     setLoading(true);
     try {
       await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), paymentMode);
+      setSuccessSnapshot({ items: totalItems, total: totalFinal });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => {
         setSuccess(false);
+        setSuccessSnapshot(null);
         setCart([]);
         setView("collections");
         setSelectedCollection(null);
@@ -82,6 +137,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
     setSelectedCollection(null);
     setPaymentMode(defaultPaymentMode ?? null);
     setSuccess(false);
+    setSuccessSnapshot(null);
     onClose();
   };
 
@@ -90,9 +146,6 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
     setSelectedCollection(col);
     setView("produits");
   };
-
-  const successTotalItems = totalItems;
-  const successTotalCentimes = totalCentimes;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
@@ -123,8 +176,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
               </View>
               <Text style={[styles.successText, { color }]}>Vente enregistrée !</Text>
               <Text style={styles.successSub}>
-                {successTotalItems} article{successTotalItems > 1 ? "s" : ""}
-                {successTotalCentimes > 0 ? ` · ${formatPrix(successTotalCentimes)}` : ""}
+                {successSnapshot?.items ?? 0} article{(successSnapshot?.items ?? 0) > 1 ? "s" : ""}
+                {successSnapshot && successSnapshot.total > 0 ? ` · ${formatPrix(successSnapshot.total)}` : ""}
               </Text>
             </View>
           ) : view === "collections" ? (
@@ -139,6 +192,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
               collection={selectedCollection}
               cart={cart}
               color={color}
+              promo={promo}
               getCartQty={getCartQty}
               updateCart={updateCart}
             />
@@ -148,6 +202,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, onVente, 
             <CartFooter
               totalItems={totalItems}
               totalCentimes={totalCentimes}
+              totalFinal={totalFinal}
+              promo={promo}
               paymentMode={paymentMode}
               onSelectPayment={setPaymentMode}
               loading={loading}
@@ -226,16 +282,24 @@ function ProduitsView({
   collection,
   cart,
   color,
+  promo,
   getCartQty,
   updateCart,
 }: {
   collection: CollectionWithProduits | null;
   cart: CartItem[];
   color: string;
+  promo: PromoResult;
   getCartQty: (id: number) => number;
   updateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
 }) {
   if (!collection) return null;
+
+  const freeCountByProduct = new Map<number, number>();
+  for (const fd of promo.freeDetails) {
+    freeCountByProduct.set(fd.produitId, fd.count);
+  }
+
   return (
     <>
       <Text style={styles.sectionLabel}>Sélectionner les modèles</Text>
@@ -243,6 +307,7 @@ function ProduitsView({
         {collection.produits.map((p) => {
           const produitWithCol = { ...p, collectionNom: collection.nom };
           const cartQty = getCartQty(p.id);
+          const freeQty = freeCountByProduct.get(p.id) ?? 0;
           const isEmpty = p.quantite === 0;
           const isSelected = cartQty > 0;
           return (
@@ -256,9 +321,19 @@ function ProduitsView({
             >
               <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
               <View style={styles.productInfo}>
-                <Text style={[styles.productName, isEmpty && { color: COLORS.textSecondary }]}>
-                  {p.couleur}
-                </Text>
+                <View style={styles.productNameRow}>
+                  <Text style={[styles.productName, isEmpty && { color: COLORS.textSecondary }]}>
+                    {p.couleur}
+                  </Text>
+                  {freeQty > 0 && (
+                    <View style={styles.freeBadge}>
+                      <Feather name="gift" size={11} color="#fff" />
+                      <Text style={styles.freeBadgeText}>
+                        {freeQty > 1 ? `${freeQty}x ` : ""}offerte
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <View style={styles.productMeta}>
                   {p.prixCentimes > 0 && (
                     <Text style={[styles.productPrice, { color: isSelected ? color : COLORS.accent }]}>
@@ -324,6 +399,8 @@ function ProduitsView({
 function CartFooter({
   totalItems,
   totalCentimes,
+  totalFinal,
+  promo,
   paymentMode,
   onSelectPayment,
   loading,
@@ -331,21 +408,64 @@ function CartFooter({
 }: {
   totalItems: number;
   totalCentimes: number;
+  totalFinal: number;
+  promo: PromoResult;
   paymentMode: "cash" | "carte" | null;
   onSelectPayment: (mode: "cash" | "carte") => void;
   loading: boolean;
   onConfirm: () => void;
 }) {
   const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
+  const hasPromo = promo.nbFree > 0;
 
   return (
     <View style={styles.cartFooter}>
-      <View style={styles.cartInfo}>
-        <Text style={styles.cartItemCount}>
-          {totalItems} article{totalItems !== 1 ? "s" : ""}
-        </Text>
-        {totalCentimes > 0 && (
-          <Text style={[styles.cartTotal, { color: confirmColor }]}>{formatPrix(totalCentimes)}</Text>
+      <View style={styles.cartSummary}>
+        {hasPromo ? (
+          <>
+            <View style={styles.cartSummaryRow}>
+              <Text style={styles.cartSummaryLabel}>
+                {totalItems} article{totalItems !== 1 ? "s" : ""}
+              </Text>
+              <Text style={styles.cartSummaryValue}>{formatPrix(totalCentimes)}</Text>
+            </View>
+
+            <View style={styles.promoBanner}>
+              <View style={styles.promoBannerLeft}>
+                <Feather name="gift" size={14} color={COLORS.promo} />
+                <Text style={styles.promoBannerTitle}>
+                  Promo 2+1 · {promo.nbFree} paire{promo.nbFree > 1 ? "s" : ""} offerte{promo.nbFree > 1 ? "s" : ""}
+                </Text>
+              </View>
+              <Text style={styles.promoDiscount}>-{formatPrix(promo.discountCentimes)}</Text>
+            </View>
+
+            {promo.freeDetails.map((fd) => (
+              <View key={fd.produitId} style={styles.promoDetailRow}>
+                <Feather name="check" size={12} color={COLORS.promo} />
+                <Text style={styles.promoDetailText} numberOfLines={1}>
+                  {fd.count > 1 ? `${fd.count}× ` : ""}{fd.collectionNom} – {fd.couleur}
+                </Text>
+                <Text style={styles.promoDetailPrice}>
+                  {fd.count > 1 ? `${formatPrix(fd.prixCentimes)} × ${fd.count}` : formatPrix(fd.prixCentimes)}
+                </Text>
+              </View>
+            ))}
+
+            <View style={[styles.cartSummaryRow, styles.cartTotalRow]}>
+              <Text style={styles.cartTotalLabel}>Total</Text>
+              <Text style={[styles.cartTotalValue, { color: confirmColor }]}>{formatPrix(totalFinal)}</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.cartInfo}>
+            <Text style={styles.cartItemCount}>
+              {totalItems} article{totalItems !== 1 ? "s" : ""}
+            </Text>
+            {totalCentimes > 0 && (
+              <Text style={[styles.cartTotal, { color: confirmColor }]}>{formatPrix(totalCentimes)}</Text>
+            )}
+          </View>
         )}
       </View>
 
@@ -415,7 +535,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 36,
-    maxHeight: "90%",
+    maxHeight: "92%",
   },
   handle: {
     width: 36,
@@ -464,7 +584,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   listContainer: {
-    maxHeight: 380,
+    maxHeight: 340,
     paddingHorizontal: 16,
   },
   collectionRow: {
@@ -543,11 +663,31 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  productNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   productName: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: COLORS.text,
     textTransform: "capitalize",
+  },
+  freeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: COLORS.promo,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  freeBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
   },
   productMeta: {
     flexDirection: "row",
@@ -592,6 +732,98 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     gap: 10,
   },
+  cartSummary: {
+    gap: 6,
+  },
+  cartSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cartSummaryLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.textSecondary,
+  },
+  cartSummaryValue: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+  },
+  promoBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.promo + "15",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.promo + "40",
+  },
+  promoBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  promoBannerTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.promo,
+  },
+  promoDiscount: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.promo,
+  },
+  promoDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  promoDetailText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    textTransform: "capitalize",
+  },
+  promoDetailPrice: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.promo,
+  },
+  cartTotalRow: {
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 2,
+  },
+  cartTotalLabel: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+  },
+  cartTotalValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+  },
+  cartInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cartItemCount: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.textSecondary,
+  },
+  cartTotal: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+  },
   paymentRow: {
     flexDirection: "row",
     gap: 10,
@@ -620,20 +852,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: COLORS.text,
-  },
-  cartInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cartItemCount: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: COLORS.textSecondary,
-  },
-  cartTotal: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
   },
   confirmBtn: {
     flexDirection: "row",

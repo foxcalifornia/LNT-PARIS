@@ -22,6 +22,7 @@ export default {
     tabIconSelected: accent,
     cash: "#059669",
     card_payment: "#1D4ED8",
+    promo: "#7C3AED",
     shadow: "rgba(26, 26, 46, 0.08)",
   },
 };
