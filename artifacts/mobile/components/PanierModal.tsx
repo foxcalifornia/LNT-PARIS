@@ -128,10 +128,9 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const successColor = successMode === "carte" ? COLORS.card_payment : COLORS.cash;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
-          <View style={styles.handle} />
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }]}>
+        <View style={styles.sheet}>
 
           <View style={styles.header}>
             <View style={{ width: 36 }} />
@@ -365,16 +364,10 @@ function getColorHex(couleur: string): string {
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end",
+    flex: 1, backgroundColor: COLORS.background,
   },
   sheet: {
-    backgroundColor: COLORS.card,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "92%",
-  },
-  handle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.border,
-    alignSelf: "center", marginTop: 12, marginBottom: 4,
+    flex: 1, backgroundColor: COLORS.card,
   },
   header: {
     flexDirection: "row", alignItems: "center",

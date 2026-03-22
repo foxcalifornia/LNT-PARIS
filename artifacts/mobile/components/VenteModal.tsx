@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { formatPrix, type CollectionWithProduits, type Produit } from "@/lib/api";
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose }: Props) {
+  const insets = useSafeAreaInsets();
   const [view, setView] = useState<"collections" | "produits">("collections");
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
@@ -102,10 +104,9 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
+      <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }]}>
         <View style={styles.sheet}>
-          <View style={styles.handle} />
 
           <View style={styles.sheetHeader}>
             {view === "produits" ? (
@@ -481,24 +482,15 @@ function getColorHex(couleur: string): string {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "flex-end",
+    backgroundColor: COLORS.background,
   },
   sheet: {
+    flex: 1,
     backgroundColor: COLORS.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingBottom: 36,
-    maxHeight: "92%",
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.border,
-    alignSelf: "center",
-    marginTop: 12,
-    marginBottom: 4,
+    width: 0,
+    height: 0,
   },
   sheetHeader: {
     flexDirection: "row",
