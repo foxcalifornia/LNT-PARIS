@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
     fontSize: 13, fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary, textAlign: "center", lineHeight: 20,
   },
-  scrollView: { maxHeight: 440 },
+  scrollView: { flex: 1 },
 
   itemCard: {
     backgroundColor: COLORS.background, borderRadius: 16,

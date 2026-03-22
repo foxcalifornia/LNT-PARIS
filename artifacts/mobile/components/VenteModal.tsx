@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   listContainer: {
-    maxHeight: 340,
+    flex: 1,
     paddingHorizontal: 16,
   },
   collectionRow: {
