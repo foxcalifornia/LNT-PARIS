@@ -160,11 +160,14 @@ export default function CaisseScreen() {
     paymentMode: "cash" | "carte"
   ) => {
     if (!currentSession) return;
+    if (paymentMode === "carte") {
+      throw new Error("Les paiements carte doivent passer par le terminal SumUp.");
+    }
     for (const item of items) {
       await api.inventory.createVente({
         produitId: item.produitId,
         quantiteVendue: item.quantite,
-        typePaiement: paymentMode === "cash" ? "CASH" : "CARTE",
+        typePaiement: "CASH",
       });
     }
     refetchCollections();
@@ -275,6 +278,10 @@ export default function CaisseScreen() {
           onCartChange={setCart}
           onVente={handleVente}
           onClose={() => setShowVente(false)}
+          onPayCarte={() => {
+            setShowVente(false);
+            setTimeout(() => setShowPanier(true), 350);
+          }}
         />
       )}
 

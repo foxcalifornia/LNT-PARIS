@@ -30,9 +30,10 @@ type Props = {
   onCartChange: (cart: CartItem[]) => void;
   onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte") => Promise<void>;
   onClose: () => void;
+  onPayCarte?: () => void;
 };
 
-export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose }: Props) {
+export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose, onPayCarte }: Props) {
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<"collections" | "produits">("collections");
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
@@ -66,8 +67,19 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     onCartChange(newCart);
   };
 
+  const handleConfirmCarte = () => {
+    if (cart.length === 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onClose();
+    onPayCarte?.();
+  };
+
   const handleConfirm = async () => {
     if (cart.length === 0 || loading || !paymentMode) return;
+    if (paymentMode === "carte") {
+      handleConfirmCarte();
+      return;
+    }
     setLoading(true);
     try {
       await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), paymentMode);
@@ -369,6 +381,7 @@ function CartFooter({
   onSelectPayment: (mode: "cash" | "carte") => void;
   loading: boolean;
   onConfirm: () => void;
+  onPayCarte?: () => void;
 }) {
   const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
   const hasPromo = promo.nbFree > 0;
@@ -450,9 +463,17 @@ function CartFooter({
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <>
-            <Feather name="check" size={20} color="#fff" />
+            <Feather
+              name={paymentMode === "carte" ? "credit-card" : "check"}
+              size={20}
+              color="#fff"
+            />
             <Text style={styles.confirmText}>
-              {paymentMode ? "Confirmer la Vente" : "Choisir le mode de paiement"}
+              {paymentMode === "carte"
+                ? "Payer sur le terminal SumUp"
+                : paymentMode === "cash"
+                ? "Confirmer le paiement cash"
+                : "Choisir le mode de paiement"}
             </Text>
           </>
         )}
