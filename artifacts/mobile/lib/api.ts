@@ -75,6 +75,25 @@ export type JourReport = {
   articlesParJour: LigneVente[];
 };
 
+export type VenteTransaction = {
+  heure: string;
+  typePaiement: "CASH" | "CARTE";
+  montantCentimes: number;
+  articles: {
+    couleur: string;
+    collectionNom: string;
+    quantiteVendue: number;
+    montantCentimes: number;
+  }[];
+};
+
+export type VentesJour = {
+  transactions: VenteTransaction[];
+  totalCash: number;
+  totalCarte: number;
+  total: number;
+};
+
 export function formatPrix(centimes: number): string {
   return `€${(centimes / 100).toFixed(2).replace(".", ",")}`;
 }
@@ -93,6 +112,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    getVentesJour: () => request<VentesJour>("/caisse/today"),
   },
   inventory: {
     getCollections: () => request<CollectionWithProduits[]>("/collections"),

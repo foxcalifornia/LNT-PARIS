@@ -19,6 +19,8 @@ import Colors from "@/constants/colors";
 import { api, formatPrix, type Session, type CollectionWithProduits, type Produit } from "@/lib/api";
 import { VenteModal } from "@/components/VenteModal";
 import { PasswordModal } from "@/components/PasswordModal";
+import { VentesJourModal } from "@/components/VentesJourModal";
+import { InventaireReadonlyModal } from "@/components/InventaireReadonlyModal";
 
 const COLORS = Colors.light;
 
@@ -53,6 +55,8 @@ export default function CaisseScreen() {
   const [showVente, setShowVente] = useState(false);
   const [ventePaymentMode, setVentePaymentMode] = useState<"cash" | "carte">("cash");
   const [showPassword, setShowPassword] = useState(false);
+  const [showVentesJour, setShowVentesJour] = useState(false);
+  const [showInventaire, setShowInventaire] = useState(false);
   const [openingLoading, setOpeningLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -217,6 +221,8 @@ export default function CaisseScreen() {
             setVentePaymentMode(mode);
             setShowVente(true);
           }}
+          onShowInventaire={() => setShowInventaire(true)}
+          onShowVentesJour={() => setShowVentesJour(true)}
         />
       )}
 
@@ -239,6 +245,17 @@ export default function CaisseScreen() {
           onClose={() => setShowVente(false)}
         />
       )}
+
+      <VentesJourModal
+        visible={showVentesJour}
+        onClose={() => setShowVentesJour(false)}
+      />
+
+      <InventaireReadonlyModal
+        visible={showInventaire}
+        collections={collections}
+        onClose={() => setShowInventaire(false)}
+      />
     </View>
   );
 }
@@ -329,9 +346,13 @@ type ActiveCaisseViewProps = {
   collections: CollectionWithProduits[];
   onClose: () => void;
   onShowVente: (mode: "cash" | "carte") => void;
+  onShowInventaire: () => void;
+  onShowVentesJour: () => void;
 };
 
-function ActiveCaisseView({ session, collections, onClose, onShowVente }: ActiveCaisseViewProps) {
+function ActiveCaisseView({ session, collections, onClose, onShowVente, onShowInventaire, onShowVentesJour }: ActiveCaisseViewProps) {
+  const totalPaires = collections.reduce((s, c) => s + c.produits.reduce((ss, p) => ss + p.quantite, 0), 0);
+
   return (
     <View style={styles.activeCaisse}>
       <View style={styles.sessionBanner}>
@@ -363,11 +384,11 @@ function ActiveCaisseView({ session, collections, onClose, onShowVente }: Active
         </Pressable>
       </View>
 
-      <Text style={styles.stockHeader}>Stock Disponible</Text>
+      <Text style={styles.stockHeader}>Stock Disponible · {totalPaires} paires</Text>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
       >
         {collections.map((col) => (
           <View key={col.id} style={styles.colCard}>
@@ -391,6 +412,18 @@ function ActiveCaisseView({ session, collections, onClose, onShowVente }: Active
           </View>
         )}
       </ScrollView>
+
+      <View style={styles.bottomActions}>
+        <Pressable style={styles.bottomBtn} onPress={onShowInventaire}>
+          <Feather name="package" size={17} color={COLORS.accent} />
+          <Text style={styles.bottomBtnText}>Inventaire</Text>
+        </Pressable>
+        <View style={styles.bottomBtnDivider} />
+        <Pressable style={styles.bottomBtn} onPress={onShowVentesJour}>
+          <Feather name="list" size={17} color={COLORS.primary} />
+          <Text style={styles.bottomBtnText}>Ventes du Jour</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -705,6 +738,35 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#fff",
     letterSpacing: -0.2,
+  },
+  bottomActions: {
+    flexDirection: "row",
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    overflow: "hidden",
+  },
+  bottomBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+  },
+  bottomBtnDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 10,
+  },
+  bottomBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
   },
   stockHeader: {
     fontSize: 11,

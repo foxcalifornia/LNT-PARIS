@@ -66,7 +66,7 @@ export default function HomeScreen() {
       <View style={styles.content}>
         <MenuCard
           icon="shopping-bag"
-          title="Ouvrir la Caisse"
+          title="Caisse"
           subtitle="Enregistrer une vente"
           color={COLORS.cash}
           bgColor="#ECFDF5"

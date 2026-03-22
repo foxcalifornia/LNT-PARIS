@@ -8,7 +8,7 @@ import {
   insertProduitSchema,
   insertVenteSchema,
 } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, gte } from "drizzle-orm";
 
 const router: IRouter = Router();
 
