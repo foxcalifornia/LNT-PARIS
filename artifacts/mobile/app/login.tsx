@@ -45,9 +45,14 @@ export default function LoginScreen() {
     setTimeout(() => inputRef.current?.focus(), 200);
   };
 
-  const handleLogin = () => {
-    if (!selectedRole || !password) return;
-    const success = login(selectedRole, password);
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!selectedRole || !password || loading) return;
+    setLoading(true);
+    setError(false);
+    const success = await login(selectedRole, password);
+    setLoading(false);
     if (success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {

@@ -1,15 +1,11 @@
 import React, { createContext, useContext, useState } from "react";
+import { api } from "@/lib/api";
 
 export type Role = "admin" | "vendeur";
 
-const PASSWORDS: Record<Role, string> = {
-  admin: "1234",
-  vendeur: "5678",
-};
-
 type AuthContextType = {
   role: Role | null;
-  login: (role: Role, password: string) => boolean;
+  login: (role: Role, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -17,7 +13,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({
   role: null,
-  login: () => false,
+  login: async () => false,
   logout: () => {},
   isAuthenticated: false,
   isAdmin: false,
@@ -26,12 +22,14 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
 
-  const login = (selectedRole: Role, password: string): boolean => {
-    if (password === PASSWORDS[selectedRole]) {
+  const login = async (selectedRole: Role, password: string): Promise<boolean> => {
+    try {
+      await api.auth.login(selectedRole, password);
       setRole(selectedRole);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
   const logout = () => {

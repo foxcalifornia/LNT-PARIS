@@ -1,4 +1,4 @@
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}/api${path}`;
@@ -212,5 +212,27 @@ export const api = {
         "/payments/cancel",
         { method: "POST", body: JSON.stringify({ saleReference }) }
       ),
+  },
+
+  auth: {
+    login: (role: "admin" | "vendeur", password: string) =>
+      request<{ success: boolean; role: string }>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ role, password }),
+      }),
+  },
+
+  settings: {
+    get: () => request<Record<string, string>>("/settings"),
+    update: (updates: Record<string, string>) =>
+      request<{ success: boolean }>("/settings", {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      }),
+    updatePassword: (data: { role: "admin" | "vendeur"; newPassword: string; confirmPassword: string }) =>
+      request<{ success: boolean }>("/settings/password", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
   },
 };

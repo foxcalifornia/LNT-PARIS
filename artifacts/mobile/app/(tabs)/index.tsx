@@ -40,7 +40,7 @@ export default function HomeScreen() {
     );
   };
 
-  const handlePress = (section: "caisse" | "inventaire" | "reporting") => {
+  const handlePress = (section: "caisse" | "inventaire" | "reporting" | "parametres") => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (section === "caisse") {
       router.push("/caisse");
@@ -48,6 +48,8 @@ export default function HomeScreen() {
       router.push("/inventaire");
     } else if (section === "reporting") {
       router.push("/reporting");
+    } else if (section === "parametres") {
+      router.push("/parametres");
     }
   };
 
@@ -104,6 +106,15 @@ export default function HomeScreen() {
               color="#8B5CF6"
               bgColor="#F5F3FF"
               onPress={() => handlePress("reporting")}
+            />
+
+            <MenuCard
+              icon="settings"
+              title="Paramètres"
+              subtitle="Accès, horaires, promotions"
+              color="#0F766E"
+              bgColor="#F0FDFA"
+              onPress={() => handlePress("parametres")}
             />
           </>
         )}

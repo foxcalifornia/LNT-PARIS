@@ -1,0 +1,146 @@
+Créer une véritable page “Paramètres” accessible uniquement au profil Admin.
+
+Objectif :
+Centraliser tous les réglages importants de l’application dans une seule page claire, organisée et sécurisée. Cette page doit permettre à l’admin de configurer l’application sans modifier le code.
+
+1. Accès à la page Paramètres
+- La page “Paramètres” doit être visible uniquement pour le profil Admin.
+- Le profil Vendeur ne doit pas voir cette section et ne doit pas pouvoir y accéder.
+- Vérifier l’accès côté frontend et côté backend.
+
+2. Organisation de la page
+La page Paramètres doit être organisée en sections ou cartes distinctes pour garder une interface claire.
+
+Sections à créer :
+
+---
+
+SECTION 1 : Gestion des accès
+
+Permettre à l’admin de gérer les mots de passe de connexion.
+
+Fonctionnalités :
+- Modifier le mot de passe Admin
+- Modifier le mot de passe Vendeur
+
+Interface :
+- Champ “Nouveau mot de passe”
+- Champ “Confirmer le mot de passe”
+- Bouton “Enregistrer”
+
+Règles :
+- vérifier que les mots de passe correspondent
+- afficher un message d’erreur si ce n’est pas le cas
+- stocker les mots de passe de manière sécurisée (hash côté backend)
+- afficher un message de confirmation après mise à jour
+
+---
+
+SECTION 2 : Horaires de caisse
+
+Permettre de configurer les horaires d’utilisation de la caisse.
+
+Paramètres :
+- heure d’ouverture autorisée
+- heure de fermeture automatique
+
+Exemple :
+Ouverture : 10:00  
+Fermeture : 20:00
+
+Ces horaires doivent être utilisés par la logique de la caisse pour contrôler l’ouverture.
+
+---
+
+SECTION 3 : Promotions
+
+Permettre de gérer les promotions actives dans le magasin.
+
+Pour commencer :
+
+Promotion :
+“2 paires achetées, la 3ème offerte”
+
+Fonctionnalités :
+- activer / désactiver la promotion
+- afficher clairement si la promotion est active
+
+---
+
+SECTION 4 : Paiements
+
+Configurer les options de paiement.
+
+Afficher :
+- état de l’intégration SumUp
+- possibilité d’activer ou désactiver le paiement par carte bancaire
+
+Informations utiles :
+- statut de connexion au terminal SumUp
+- identifiant de terminal si disponible
+
+---
+
+SECTION 5 : Paramètres de stock
+
+Configurer les règles liées à l’inventaire.
+
+Paramètres possibles :
+- seuil minimum de stock par défaut
+- activation des alertes de stock faible
+
+Objectif :
+faciliter le réapprovisionnement.
+
+---
+
+SECTION 6 : Informations boutique
+
+Permettre de configurer les informations générales du magasin.
+
+Champs :
+- nom du magasin
+- adresse
+- devise (EUR par défaut)
+
+Ces informations pourront être utilisées dans les ventes ou les exports.
+
+---
+
+3. Expérience utilisateur
+
+La page Paramètres doit être :
+
+- claire
+- facile à comprendre
+- organisée en cartes
+- optimisée pour mobile
+
+Chaque section doit avoir :
+- un titre
+- une courte description
+- des champs simples à modifier
+- un bouton “Enregistrer”
+
+---
+
+4. Sécurité
+
+- Seul l’Admin peut modifier les paramètres.
+- Vérifier les permissions côté backend.
+- Enregistrer les changements dans la base de données.
+
+---
+
+5. Objectif final
+
+Créer une vraie page Paramètres Admin qui permet de gérer :
+
+- les accès utilisateurs
+- les horaires de caisse
+- les promotions
+- les paiements
+- les paramètres de stock
+- les informations du magasin
+
+Cette page doit permettre de faire évoluer facilement l’application sans toucher au code.
