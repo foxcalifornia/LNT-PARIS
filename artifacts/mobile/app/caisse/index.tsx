@@ -50,7 +50,7 @@ function getTodayLabel() {
 export default function CaisseScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { isAdmin } = useAuth();
+  const { isAdmin, logout } = useAuth();
   const [caisseState, setCaisseState] = useState<CaisseState>("checking");
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -248,7 +248,15 @@ export default function CaisseScreen() {
             <Feather name="x" size={22} color={COLORS.text} />
           </Pressable>
         ) : (
-          <View style={{ width: 40 }} />
+          <Pressable
+            style={styles.backBtn}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              logout();
+            }}
+          >
+            <Feather name="log-out" size={20} color={COLORS.danger} />
+          </Pressable>
         )}
         <Text style={styles.headerTitle}>Caisse</Text>
         <View style={{ width: 40 }} />
