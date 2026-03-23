@@ -1,0 +1,153 @@
+Modifier le parcours utilisateur de la gestion du stock.
+
+Objectif :
+Avoir une gestion du stock plus claire et plus précise, avec une navigation en 3 niveaux :
+1. Collection
+2. Produit
+3. Fiche de gestion de stock du produit
+
+1. Nouveau parcours utilisateur
+
+Dans la section Inventaire / Gestion du stock, l’affichage doit fonctionner comme suit :
+
+- afficher la liste des collections
+- chaque collection doit avoir une liste déroulante
+- quand on ouvre une collection, afficher les produits de cette collection
+- quand on clique sur un produit, ouvrir une fiche dédiée de gestion de stock pour ce produit
+
+Important :
+- on ne modifie pas directement le stock dans la liste
+- la modification du stock se fait uniquement dans la fiche du produit
+
+2. Écran liste des collections et produits
+
+Afficher :
+- nom de la collection
+- liste déroulante des produits dans la collection
+
+Quand la collection est dépliée :
+- afficher les produits associés
+- chaque produit doit être cliquable
+
+Exemple :
+Collection : Santorini
+- Bleu
+- Rouge
+- Vert
+
+Quand on clique sur “Bleu” :
+→ ouvrir la fiche de gestion de stock de Santorini Bleu
+
+3. Fiche de gestion de stock du produit
+
+Créer une fiche produit dédiée pour la gestion du stock.
+
+Cette fiche doit afficher au minimum :
+
+- nom de la collection
+- nom du produit / variante
+- stock boutique
+- stock réserve
+- minimum boutique
+
+4. Actions possibles dans la fiche produit
+
+Dans cette fiche, l’utilisateur doit pouvoir :
+
+- voir le stock boutique actuel
+- voir le stock réserve actuel
+- voir le minimum requis en boutique
+- modifier le minimum boutique
+- faire un transfert entre réserve et boutique
+- ajuster le stock si nécessaire
+
+5. Règle importante de gestion des stocks
+
+Quand on ajoute du stock dans la boutique depuis la fiche produit :
+- le stock boutique augmente
+- le stock réserve diminue automatiquement du même montant
+
+Exemple :
+Stock boutique : 5
+Stock réserve : 20
+
+Si on ajoute 3 au stock boutique :
+- nouveau stock boutique = 8
+- nouveau stock réserve = 17
+
+Cette logique doit être automatique.
+
+6. Transfert de stock
+
+Ajouter une action claire :
+**“Transférer du stock de la réserve vers la boutique”**
+
+Fonctionnement :
+- l’utilisateur saisit la quantité à transférer
+- l’application vérifie que la réserve contient assez de stock
+- si oui :
+  - ajouter la quantité au stock boutique
+  - soustraire automatiquement la même quantité du stock réserve
+- si non :
+  - afficher un message d’erreur clair
+
+Exemple :
+“Stock réserve insuffisant”
+
+7. Modification du stock boutique
+
+Important :
+Si l’utilisateur modifie manuellement le stock boutique à la hausse, il faut automatiquement le soustraire du stock réserve.
+
+Règle :
+- toute augmentation du stock boutique doit être déduite du stock réserve
+- ne jamais créer du stock artificiellement
+
+Si le stock boutique diminue manuellement :
+- définir la logique souhaitée de manière cohérente
+- soit demander confirmation
+- soit considérer cela comme une correction d’inventaire
+
+8. Minimum boutique
+
+Permettre de définir un minimum de stock à conserver en boutique pour chaque produit.
+
+Afficher :
+- minimum boutique actuel
+- quantité manquante pour atteindre ce minimum
+
+Exemple :
+Minimum boutique : 10
+Stock boutique actuel : 6
+Afficher :
+“Il manque 4 pièces en boutique”
+
+9. Interface utilisateur
+
+La fiche produit doit être claire et structurée avec des blocs distincts :
+
+- Informations produit
+- Stock boutique
+- Stock réserve
+- Minimum boutique
+- Transfert réserve → boutique
+
+L’interface doit être simple à utiliser sur mobile.
+
+10. Objectif final
+
+Je veux ce parcours exact :
+
+Collections
+→ ouvrir une collection
+→ voir les produits
+→ cliquer sur un produit
+→ ouvrir sa fiche de gestion de stock
+→ voir et modifier :
+  - stock boutique
+  - stock réserve
+  - minimum boutique
+  - transfert de stock
+
+Règle essentielle :
+Toute augmentation du stock boutique doit soustraire automatiquement la même quantité du stock réserve.

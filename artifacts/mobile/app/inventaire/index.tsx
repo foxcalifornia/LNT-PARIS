@@ -41,6 +41,7 @@ export default function InventaireScreen() {
   const [showAddCollection, setShowAddCollection] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("collections");
+  const [selectedProduit, setSelectedProduit] = useState<{ produit: Produit; collectionNom: string } | null>(null);
 
   const { data: collections = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["collections"],
@@ -169,6 +170,7 @@ export default function InventaireScreen() {
           collections={collections}
           isRefetching={isRefetching}
           onRefresh={refetch}
+          onSelectProduit={(p, nom) => setSelectedProduit({ produit: p, collectionNom: nom })}
         />
       ) : activeTab === "mouvements" ? (
         <MouvementsView
@@ -203,6 +205,7 @@ export default function InventaireScreen() {
                 expanded={expandedId === col.id}
                 onToggle={() => setExpandedId(expandedId === col.id ? null : col.id)}
                 onDelete={() => handleDeleteCollection(col.id, col.nom)}
+                onSelectProduit={(p, nom) => setSelectedProduit({ produit: p, collectionNom: nom })}
               />
             ))
           )}
@@ -225,6 +228,14 @@ export default function InventaireScreen() {
           setShowAddCollection(false);
         }}
       />
+
+      <ProduitStockSheet
+        visible={!!selectedProduit}
+        produit={selectedProduit?.produit ?? null}
+        collectionNom={selectedProduit?.collectionNom ?? ""}
+        onClose={() => setSelectedProduit(null)}
+        onSuccess={() => setSelectedProduit(null)}
+      />
     </View>
   );
 }
@@ -244,9 +255,10 @@ type CollectionCardProps = {
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onSelectProduit: (produit: Produit, collectionNom: string) => void;
 };
 
-function CollectionCard({ collection, expanded, onToggle, onDelete }: CollectionCardProps) {
+function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProduit }: CollectionCardProps) {
   const queryClient = useQueryClient();
   const [showAddProduit, setShowAddProduit] = useState(false);
 
@@ -308,6 +320,7 @@ function CollectionCard({ collection, expanded, onToggle, onDelete }: Collection
               key={p.id}
               produit={p}
               onDelete={() => handleDeleteProduit(p.id, p.couleur)}
+              onSelect={() => onSelectProduit(p, collection.nom)}
             />
           ))}
 
@@ -346,51 +359,19 @@ function CollectionCard({ collection, expanded, onToggle, onDelete }: Collection
 type ProduitRowProps = {
   produit: Produit;
   onDelete: () => void;
+  onSelect: () => void;
 };
 
-function ProduitRow({ produit, onDelete }: ProduitRowProps) {
-  const queryClient = useQueryClient();
-  const [editMode, setEditMode] = useState<"none" | "boutique" | "reserve" | "min">("none");
-  const [newQty, setNewQty] = useState(String(produit.quantite));
-  const [newReserve, setNewReserve] = useState(String(produit.stockReserve));
-  const [newMin, setNewMin] = useState(String(produit.stockMinimum));
-  const [showReappro, setShowReappro] = useState(false);
-
-  const updateMutation = useMutation({
-    mutationFn: (data: { quantite?: number; stockMinimum?: number; stockReserve?: number }) =>
-      api.inventory.updateProduit(produit.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections"] });
-      setEditMode("none");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-  });
-
-  const handleSaveBoutique = () => {
-    const qty = parseInt(newQty);
-    if (isNaN(qty) || qty < 0) { Alert.alert("Erreur", "Quantité invalide"); return; }
-    updateMutation.mutate({ quantite: qty });
-  };
-
-  const handleSaveReserve = () => {
-    const qty = parseInt(newReserve);
-    if (isNaN(qty) || qty < 0) { Alert.alert("Erreur", "Quantité invalide"); return; }
-    updateMutation.mutate({ stockReserve: qty });
-  };
-
-  const handleSaveMin = () => {
-    const min = parseInt(newMin);
-    if (isNaN(min) || min < 0) { Alert.alert("Erreur", "Valeur invalide"); return; }
-    updateMutation.mutate({ stockMinimum: min });
-  };
-
+function ProduitRow({ produit, onDelete, onSelect }: ProduitRowProps) {
   const hasMin = produit.stockMinimum > 0;
   const belowMin = hasMin && produit.quantite < produit.stockMinimum;
   const manque = belowMin ? produit.stockMinimum - produit.quantite : 0;
-  const canReappro = produit.stockReserve > 0;
 
   return (
-    <View style={[styles.produitRow, belowMin && styles.produitRowAlert]}>
+    <Pressable
+      style={[styles.produitRow, belowMin && styles.produitRowAlert]}
+      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(); }}
+    >
       <View style={[styles.produitDot, { backgroundColor: getColorHex(produit.couleur) }]} />
       <View style={{ flex: 1 }}>
         <Text style={styles.produitCouleur}>{produit.couleur}</Text>
@@ -409,223 +390,357 @@ function ProduitRow({ produit, onDelete }: ProduitRowProps) {
         </View>
       </View>
 
-      {editMode === "boutique" ? (
-        <View style={styles.editRow}>
-          <Text style={styles.editModeLabel}>B</Text>
-          <TextInput
-            style={styles.qtyInput}
-            value={newQty}
-            onChangeText={setNewQty}
-            keyboardType="number-pad"
-            autoFocus
-            selectTextOnFocus
-          />
-          <Pressable style={styles.saveBtn} onPress={handleSaveBoutique} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="check" size={14} color="#fff" />}
-          </Pressable>
-          <Pressable style={styles.cancelEditBtn} onPress={() => setEditMode("none")}>
-            <Feather name="x" size={14} color={COLORS.textSecondary} />
-          </Pressable>
-        </View>
-      ) : editMode === "reserve" ? (
-        <View style={styles.editRow}>
-          <Text style={[styles.editModeLabel, { color: "#8B5CF6" }]}>R</Text>
-          <TextInput
-            style={[styles.qtyInput, { borderColor: "#8B5CF6" }]}
-            value={newReserve}
-            onChangeText={setNewReserve}
-            keyboardType="number-pad"
-            autoFocus
-            selectTextOnFocus
-          />
-          <Pressable style={[styles.saveBtn, { backgroundColor: "#8B5CF6" }]} onPress={handleSaveReserve} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="check" size={14} color="#fff" />}
-          </Pressable>
-          <Pressable style={styles.cancelEditBtn} onPress={() => setEditMode("none")}>
-            <Feather name="x" size={14} color={COLORS.textSecondary} />
-          </Pressable>
-        </View>
-      ) : editMode === "min" ? (
-        <View style={styles.editRow}>
-          <Text style={[styles.editModeLabel, { color: "#F59E0B" }]}>M</Text>
-          <TextInput
-            style={[styles.qtyInput, { borderColor: "#F59E0B" }]}
-            value={newMin}
-            onChangeText={setNewMin}
-            keyboardType="number-pad"
-            autoFocus
-            selectTextOnFocus
-          />
-          <Pressable style={[styles.saveBtn, { backgroundColor: "#F59E0B" }]} onPress={handleSaveMin} disabled={updateMutation.isPending}>
-            {updateMutation.isPending ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="check" size={14} color="#fff" />}
-          </Pressable>
-          <Pressable style={styles.cancelEditBtn} onPress={() => setEditMode("none")}>
-            <Feather name="x" size={14} color={COLORS.textSecondary} />
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.produitActions}>
-          <View style={styles.stockPills}>
-            <Pressable
-              style={styles.stockPillBoutique}
-              onPress={() => { setNewQty(String(produit.quantite)); setEditMode("boutique"); }}
-            >
-              <Text style={styles.stockPillLabel}>B</Text>
-              <Text style={[styles.stockPillValue, { color: produit.quantite === 0 ? COLORS.danger : COLORS.success }]}>
-                {produit.quantite}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.stockPillReserve}
-              onPress={() => { setNewReserve(String(produit.stockReserve)); setEditMode("reserve"); }}
-            >
-              <Text style={[styles.stockPillLabel, { color: "#8B5CF6" }]}>R</Text>
-              <Text style={[styles.stockPillValue, { color: "#8B5CF6" }]}>
-                {produit.stockReserve}
-              </Text>
-            </Pressable>
+      <View style={styles.produitActions}>
+        <View style={styles.stockPills}>
+          <View style={styles.stockPillBoutique}>
+            <Text style={styles.stockPillLabel}>B</Text>
+            <Text style={[styles.stockPillValue, { color: produit.quantite === 0 ? COLORS.danger : COLORS.success }]}>
+              {produit.quantite}
+            </Text>
           </View>
-          <Pressable
-            style={[styles.editBtn, { backgroundColor: hasMin ? "#FEF3C7" : COLORS.background }]}
-            onPress={() => { setNewMin(String(produit.stockMinimum)); setEditMode("min"); }}
-          >
-            <Feather name="target" size={13} color={hasMin ? "#F59E0B" : COLORS.textSecondary} />
-          </Pressable>
-          {canReappro && (
-            <Pressable
-              style={styles.reapproBtn}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowReappro(true); }}
-            >
-              <Feather name="arrow-up-circle" size={13} color="#fff" />
-            </Pressable>
-          )}
-          <Pressable style={styles.deleteProduitBtn} onPress={onDelete}>
-            <Feather name="trash-2" size={13} color={COLORS.danger} />
-          </Pressable>
+          <View style={styles.stockPillReserve}>
+            <Text style={[styles.stockPillLabel, { color: "#8B5CF6" }]}>R</Text>
+            <Text style={[styles.stockPillValue, { color: "#8B5CF6" }]}>
+              {produit.stockReserve}
+            </Text>
+          </View>
         </View>
-      )}
-
-      <ReapproModal
-        visible={showReappro}
-        produit={produit}
-        onClose={() => setShowReappro(false)}
-        onSuccess={() => {
-          setShowReappro(false);
-          queryClient.invalidateQueries({ queryKey: ["collections"] });
-          queryClient.invalidateQueries({ queryKey: ["mouvements"] });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }}
-      />
-    </View>
+        <Pressable
+          style={styles.deleteProduitBtn}
+          onPress={(e) => { e.stopPropagation?.(); onDelete(); }}
+        >
+          <Feather name="trash-2" size={13} color={COLORS.danger} />
+        </Pressable>
+        <Feather name="chevron-right" size={16} color={COLORS.textSecondary} />
+      </View>
+    </Pressable>
   );
 }
 
-function ReapproModal({ visible, produit, onClose, onSuccess }: {
+type ProduitStockSheetProps = {
   visible: boolean;
-  produit: Produit;
+  produit: Produit | null;
+  collectionNom: string;
   onClose: () => void;
   onSuccess: () => void;
-}) {
-  const [quantite, setQuantite] = useState("1");
+};
 
-  const mutation = useMutation({
-    mutationFn: (qty: number) => api.inventory.reapprovisionnement(produit.id, qty),
-    onSuccess: () => onSuccess(),
+type SheetSection = "transfer" | "boutique" | "reserve" | "minimum" | null;
+
+function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess }: ProduitStockSheetProps) {
+  const queryClient = useQueryClient();
+  const [openSection, setOpenSection] = useState<SheetSection>(null);
+  const [inputVal, setInputVal] = useState("");
+
+  useEffect(() => {
+    if (visible) { setOpenSection(null); setInputVal(""); }
+  }, [visible, produit?.id]);
+
+  const onMutationSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["collections"] });
+    queryClient.invalidateQueries({ queryKey: ["mouvements"] });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setOpenSection(null);
+    setInputVal("");
+    onSuccess();
+  };
+
+  const transferMutation = useMutation({
+    mutationFn: (qty: number) => api.inventory.reapprovisionnement(produit!.id, qty),
+    onSuccess: onMutationSuccess,
     onError: (err: any) => Alert.alert("Erreur", err.message),
   });
 
-  const qty = parseInt(quantite) || 0;
-  const max = produit.stockReserve;
-  const valid = qty > 0 && qty <= max;
+  const boutiqueMutation = useMutation({
+    mutationFn: (nouvelleQuantite: number) => api.inventory.ajusterBoutique(produit!.id, nouvelleQuantite),
+    onSuccess: onMutationSuccess,
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
 
-  const handleConfirm = () => {
-    if (!valid) return;
-    mutation.mutate(qty);
+  const reserveMutation = useMutation({
+    mutationFn: (nouvelleQuantite: number) => api.inventory.ajusterReserve(produit!.id, nouvelleQuantite),
+    onSuccess: onMutationSuccess,
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const minimumMutation = useMutation({
+    mutationFn: (stockMinimum: number) => api.inventory.updateProduit(produit!.id, { stockMinimum }),
+    onSuccess: onMutationSuccess,
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  if (!produit) return null;
+
+  const hasMin = produit.stockMinimum > 0;
+  const belowMin = hasMin && produit.quantite < produit.stockMinimum;
+  const manque = belowMin ? produit.stockMinimum - produit.quantite : 0;
+  const canTransfer = produit.stockReserve > 0;
+
+  const parsed = parseInt(inputVal) || 0;
+
+  const openSect = (s: SheetSection, defaultVal: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setInputVal(defaultVal);
+    setOpenSection(s);
   };
+
+  const handleTransfer = () => {
+    if (parsed <= 0 || parsed > produit.stockReserve) return;
+    transferMutation.mutate(parsed);
+  };
+
+  const handleBoutique = () => {
+    if (parsed < 0) return;
+    const delta = parsed - produit.quantite;
+    if (delta > produit.stockReserve) {
+      Alert.alert("Stock réserve insuffisant", `Disponible : ${produit.stockReserve} pièce(s)`);
+      return;
+    }
+    boutiqueMutation.mutate(parsed);
+  };
+
+  const handleReserve = () => {
+    if (parsed < 0) return;
+    reserveMutation.mutate(parsed);
+  };
+
+  const handleMinimum = () => {
+    if (parsed < 0) return;
+    minimumMutation.mutate(parsed);
+  };
+
+  const isPending = transferMutation.isPending || boutiqueMutation.isPending || reserveMutation.isPending || minimumMutation.isPending;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View style={styles.formSheet}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={[styles.formSheet, { paddingBottom: 32 }]}>
           <View style={styles.handle} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={[styles.produitDot, { width: 18, height: 18, borderRadius: 9, backgroundColor: getColorHex(produit.couleur) }]} />
-            <Text style={styles.formTitle}>Réapprovisionner</Text>
-          </View>
-          <Text style={styles.reapproSubtitle}>{produit.couleur}</Text>
 
-          <View style={styles.reapproStockRow}>
-            <View style={styles.reapproStockItem}>
-              <Text style={styles.reapproStockLabel}>Boutique actuel</Text>
-              <Text style={[styles.reapproStockValue, { color: COLORS.success }]}>{produit.quantite}</Text>
+          <View style={styles.sheetHeader}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+              <View style={[styles.produitDot, { width: 20, height: 20, borderRadius: 10, backgroundColor: getColorHex(produit.couleur) }]} />
+              <View>
+                <Text style={styles.sheetTitle}>{produit.couleur}</Text>
+                <Text style={styles.sheetSubtitle}>{collectionNom}</Text>
+              </View>
             </View>
-            <Feather name="arrow-right" size={20} color={COLORS.textSecondary} />
-            <View style={styles.reapproStockItem}>
-              <Text style={styles.reapproStockLabel}>Après transfert</Text>
-              <Text style={[styles.reapproStockValue, { color: valid ? COLORS.accent : COLORS.textSecondary }]}>
-                {valid ? produit.quantite + qty : "—"}
+            <Pressable onPress={onClose} style={styles.sheetCloseBtn}>
+              <Feather name="x" size={20} color={COLORS.textSecondary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.sheetStockBanner}>
+            <View style={styles.sheetStockBlock}>
+              <Feather name="shopping-bag" size={16} color={produit.quantite === 0 ? COLORS.danger : COLORS.success} />
+              <Text style={styles.sheetStockLabel}>Boutique</Text>
+              <Text style={[styles.sheetStockValue, { color: produit.quantite === 0 ? COLORS.danger : COLORS.success }]}>
+                {produit.quantite}
               </Text>
             </View>
-          </View>
-
-          <View style={styles.reapproReserveInfo}>
-            <Feather name="archive" size={14} color="#8B5CF6" />
-            <Text style={styles.reapproReserveText}>
-              Stock réserve disponible : <Text style={{ color: "#8B5CF6", fontFamily: "Inter_700Bold" }}>{max}</Text>
-            </Text>
-          </View>
-
-          <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>Quantité à transférer</Text>
-            <View style={styles.qtyRow}>
-              <Pressable
-                style={[styles.qtyBtnLg, qty <= 1 && styles.btnDisabled]}
-                onPress={() => setQuantite(q => String(Math.max(1, parseInt(q) - 1)))}
-                disabled={qty <= 1}
-              >
-                <Feather name="minus" size={22} color={qty <= 1 ? COLORS.textSecondary : COLORS.text} />
-              </Pressable>
-              <TextInput
-                style={styles.qtyInputLg}
-                value={quantite}
-                onChangeText={setQuantite}
-                keyboardType="number-pad"
-                textAlign="center"
-              />
-              <Pressable
-                style={[styles.qtyBtnLg, qty >= max && styles.btnDisabled]}
-                onPress={() => setQuantite(q => String(Math.min(max, parseInt(q) + 1)))}
-                disabled={qty >= max}
-              >
-                <Feather name="plus" size={22} color={qty >= max ? COLORS.textSecondary : COLORS.text} />
-              </Pressable>
+            <View style={styles.sheetStockDivider} />
+            <View style={styles.sheetStockBlock}>
+              <Feather name="archive" size={16} color="#8B5CF6" />
+              <Text style={styles.sheetStockLabel}>Réserve</Text>
+              <Text style={[styles.sheetStockValue, { color: "#8B5CF6" }]}>{produit.stockReserve}</Text>
             </View>
-            {qty > max && (
-              <Text style={styles.reapproError}>Maximum disponible : {max}</Text>
+            {hasMin && (
+              <>
+                <View style={styles.sheetStockDivider} />
+                <View style={styles.sheetStockBlock}>
+                  <Feather name="target" size={16} color={belowMin ? "#F59E0B" : COLORS.textSecondary} />
+                  <Text style={styles.sheetStockLabel}>Minimum</Text>
+                  <Text style={[styles.sheetStockValue, { color: belowMin ? "#F59E0B" : COLORS.textSecondary }]}>
+                    {produit.stockMinimum}
+                  </Text>
+                </View>
+              </>
             )}
           </View>
 
-          <View style={styles.formButtons}>
-            <Pressable style={styles.formCancelBtn} onPress={onClose}>
-              <Text style={styles.formCancelText}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.formConfirmBtn, (!valid || mutation.isPending) && styles.btnDisabled]}
-              onPress={handleConfirm}
-              disabled={!valid || mutation.isPending}
+          {belowMin && (
+            <View style={styles.sheetAlertBanner}>
+              <Feather name="alert-triangle" size={14} color="#F59E0B" />
+              <Text style={styles.sheetAlertText}>
+                Il manque <Text style={{ fontFamily: "Inter_700Bold" }}>{manque} pièce{manque > 1 ? "s" : ""}</Text> en boutique
+              </Text>
+            </View>
+          )}
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 4 }}>
+            <SheetActionRow
+              icon="arrow-up-circle"
+              label="Transférer réserve → boutique"
+              color={COLORS.accent}
+              disabled={!canTransfer}
+              disabledHint={!canTransfer ? "Réserve vide" : undefined}
+              open={openSection === "transfer"}
+              onToggle={() => openSection === "transfer" ? setOpenSection(null) : openSect("transfer", "1")}
             >
-              {mutation.isPending
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.formConfirmText}>Transférer</Text>
-              }
-            </Pressable>
-          </View>
+              <View style={styles.sheetInputRow}>
+                <Pressable
+                  style={[styles.qtyBtnLg, parsed <= 1 && styles.btnDisabled]}
+                  onPress={() => setInputVal(v => String(Math.max(1, parseInt(v) - 1)))}
+                  disabled={parsed <= 1}
+                >
+                  <Feather name="minus" size={20} color={parsed <= 1 ? COLORS.textSecondary : COLORS.text} />
+                </Pressable>
+                <TextInput
+                  style={styles.qtyInputLg}
+                  value={inputVal}
+                  onChangeText={setInputVal}
+                  keyboardType="number-pad"
+                  textAlign="center"
+                  selectTextOnFocus
+                />
+                <Pressable
+                  style={[styles.qtyBtnLg, parsed >= produit.stockReserve && styles.btnDisabled]}
+                  onPress={() => setInputVal(v => String(Math.min(produit.stockReserve, parseInt(v) + 1)))}
+                  disabled={parsed >= produit.stockReserve}
+                >
+                  <Feather name="plus" size={20} color={parsed >= produit.stockReserve ? COLORS.textSecondary : COLORS.text} />
+                </Pressable>
+              </View>
+              <Text style={styles.sheetHint}>Réserve dispo : {produit.stockReserve} · Boutique après : {produit.quantite + Math.min(parsed, produit.stockReserve)}</Text>
+              <Pressable
+                style={[styles.sheetActionBtn, { backgroundColor: COLORS.accent }, (isPending || parsed <= 0 || parsed > produit.stockReserve) && styles.btnDisabled]}
+                onPress={handleTransfer}
+                disabled={isPending || parsed <= 0 || parsed > produit.stockReserve}
+              >
+                {transferMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Transférer</Text>}
+              </Pressable>
+            </SheetActionRow>
+
+            <SheetActionRow
+              icon="shopping-bag"
+              label="Corriger stock boutique"
+              color={COLORS.success}
+              open={openSection === "boutique"}
+              onToggle={() => openSection === "boutique" ? setOpenSection(null) : openSect("boutique", String(produit.quantite))}
+            >
+              <TextInput
+                style={styles.sheetTextInput}
+                value={inputVal}
+                onChangeText={setInputVal}
+                keyboardType="number-pad"
+                placeholder="Nouvelle quantité boutique"
+                placeholderTextColor={COLORS.textSecondary}
+                selectTextOnFocus
+              />
+              {parsed > produit.quantite && (
+                <Text style={styles.sheetHint}>
+                  Augmentation de {parsed - produit.quantite} → déduit de la réserve ({produit.stockReserve} dispo)
+                </Text>
+              )}
+              {parsed < produit.quantite && (
+                <Text style={[styles.sheetHint, { color: "#F59E0B" }]}>
+                  Correction de -{produit.quantite - parsed} pièce(s) (perte / inventaire)
+                </Text>
+              )}
+              <Pressable
+                style={[styles.sheetActionBtn, { backgroundColor: COLORS.success }, (isPending || parsed < 0 || isNaN(parsed)) && styles.btnDisabled]}
+                onPress={handleBoutique}
+                disabled={isPending || isNaN(parsed) || parsed < 0}
+              >
+                {boutiqueMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer</Text>}
+              </Pressable>
+            </SheetActionRow>
+
+            <SheetActionRow
+              icon="archive"
+              label="Corriger stock réserve"
+              color="#8B5CF6"
+              open={openSection === "reserve"}
+              onToggle={() => openSection === "reserve" ? setOpenSection(null) : openSect("reserve", String(produit.stockReserve))}
+            >
+              <TextInput
+                style={[styles.sheetTextInput, { borderColor: "#8B5CF6" }]}
+                value={inputVal}
+                onChangeText={setInputVal}
+                keyboardType="number-pad"
+                placeholder="Nouvelle quantité réserve"
+                placeholderTextColor={COLORS.textSecondary}
+                selectTextOnFocus
+              />
+              <Text style={styles.sheetHint}>Réserve actuelle : {produit.stockReserve}</Text>
+              <Pressable
+                style={[styles.sheetActionBtn, { backgroundColor: "#8B5CF6" }, (isPending || parsed < 0 || isNaN(parsed)) && styles.btnDisabled]}
+                onPress={handleReserve}
+                disabled={isPending || isNaN(parsed) || parsed < 0}
+              >
+                {reserveMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer</Text>}
+              </Pressable>
+            </SheetActionRow>
+
+            <SheetActionRow
+              icon="target"
+              label="Modifier minimum boutique"
+              color="#F59E0B"
+              open={openSection === "minimum"}
+              onToggle={() => openSection === "minimum" ? setOpenSection(null) : openSect("minimum", String(produit.stockMinimum))}
+            >
+              <TextInput
+                style={[styles.sheetTextInput, { borderColor: "#F59E0B" }]}
+                value={inputVal}
+                onChangeText={setInputVal}
+                keyboardType="number-pad"
+                placeholder="Minimum en boutique (0 = aucune alerte)"
+                placeholderTextColor={COLORS.textSecondary}
+                selectTextOnFocus
+              />
+              <Text style={styles.sheetHint}>Actuel : {produit.stockMinimum} · Mettre 0 pour désactiver l'alerte</Text>
+              <Pressable
+                style={[styles.sheetActionBtn, { backgroundColor: "#F59E0B" }, (isPending || parsed < 0 || isNaN(parsed)) && styles.btnDisabled]}
+                onPress={handleMinimum}
+                disabled={isPending || isNaN(parsed) || parsed < 0}
+              >
+                {minimumMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer</Text>}
+              </Pressable>
+            </SheetActionRow>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+function SheetActionRow({
+  icon,
+  label,
+  color,
+  disabled,
+  disabledHint,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: string;
+  label: string;
+  color: string;
+  disabled?: boolean;
+  disabledHint?: string;
+  open: boolean;
+  onToggle: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.sheetActionSection, disabled && { opacity: 0.45 }]}>
+      <Pressable
+        style={styles.sheetActionHeader}
+        onPress={disabled ? undefined : onToggle}
+        disabled={!!disabled}
+      >
+        <View style={[styles.sheetActionIcon, { backgroundColor: color + "1A" }]}>
+          <Feather name={icon as any} size={18} color={color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sheetActionLabel}>{label}</Text>
+          {disabledHint && <Text style={styles.sheetHint}>{disabledHint}</Text>}
+        </View>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={18} color={COLORS.textSecondary} />
+      </Pressable>
+      {open && <View style={styles.sheetActionBody}>{children}</View>}
+    </View>
   );
 }
 
@@ -633,12 +748,13 @@ function AlertesView({
   collections,
   isRefetching,
   onRefresh,
+  onSelectProduit,
 }: {
   collections: CollectionWithProduits[];
   isRefetching: boolean;
   onRefresh: () => void;
+  onSelectProduit: (produit: Produit, collectionNom: string) => void;
 }) {
-  const queryClient = useQueryClient();
 
   const produitsSousMin = collections.flatMap((col) =>
     col.produits
@@ -662,7 +778,7 @@ function AlertesView({
         </View>
         <Text style={styles.emptyTitle}>Aucun minimum défini</Text>
         <Text style={styles.emptySubtitle}>
-          Appuyez sur l'icône cible (⊙) sur chaque produit pour définir un stock minimum boutique
+          Ouvrez la fiche d'un produit pour définir un stock minimum boutique
         </Text>
       </View>
     );
@@ -683,7 +799,7 @@ function AlertesView({
             <Text style={styles.alertSectionTitle}>À réapprovisionner ({produitsKo.length})</Text>
           </View>
           {produitsKo.map((p) => (
-            <AlertRow key={p.id} produit={p} />
+            <AlertRow key={p.id} produit={p} onSelect={() => onSelectProduit(p, p.collectionNom)} />
           ))}
         </>
       )}
@@ -695,7 +811,7 @@ function AlertesView({
             <Text style={[styles.alertSectionTitle, { color: COLORS.success }]}>Stock suffisant ({produitsOk.length})</Text>
           </View>
           {produitsOk.map((p) => (
-            <AlertRow key={p.id} produit={p} />
+            <AlertRow key={p.id} produit={p} onSelect={() => onSelectProduit(p, p.collectionNom)} />
           ))}
         </>
       )}
@@ -703,14 +819,10 @@ function AlertesView({
   );
 }
 
-function AlertRow({ produit }: { produit: Produit & { collectionNom: string } }) {
-  const queryClient = useQueryClient();
-  const [showReappro, setShowReappro] = useState(false);
-
+function AlertRow({ produit, onSelect }: { produit: Produit & { collectionNom: string }; onSelect: () => void }) {
   const manque = Math.max(0, produit.stockMinimum - produit.quantite);
   const belowMin = manque > 0;
   const pct = Math.min(100, produit.stockMinimum > 0 ? (produit.quantite / produit.stockMinimum) * 100 : 100);
-  const canReappro = produit.stockReserve > 0 && belowMin;
 
   return (
     <View style={[styles.alertRow, belowMin && styles.alertRowKo]}>
@@ -770,27 +882,13 @@ function AlertRow({ produit }: { produit: Produit & { collectionNom: string } })
       </View>
       <Text style={styles.alertProgressLabel}>{Math.round(pct)}% du minimum boutique</Text>
 
-      {canReappro && (
-        <Pressable
-          style={styles.alertReapproBtn}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowReappro(true); }}
-        >
-          <Feather name="arrow-up-circle" size={15} color="#fff" />
-          <Text style={styles.alertReaproBtnText}>Réapprovisionner depuis la réserve ({produit.stockReserve} dispo.)</Text>
-        </Pressable>
-      )}
-
-      <ReapproModal
-        visible={showReappro}
-        produit={produit}
-        onClose={() => setShowReappro(false)}
-        onSuccess={() => {
-          setShowReappro(false);
-          queryClient.invalidateQueries({ queryKey: ["collections"] });
-          queryClient.invalidateQueries({ queryKey: ["mouvements"] });
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }}
-      />
+      <Pressable
+        style={styles.alertReapproBtn}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onSelect(); }}
+      >
+        <Feather name="sliders" size={15} color="#fff" />
+        <Text style={styles.alertReaproBtnText}>Gérer le stock</Text>
+      </Pressable>
     </View>
   );
 }
@@ -1821,5 +1919,89 @@ const styles = StyleSheet.create({
   },
   consommableSaveText: {
     fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  sheetHeader: {
+    flexDirection: "row", alignItems: "center", marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 18, fontFamily: "Inter_700Bold", color: COLORS.text, textTransform: "capitalize",
+  },
+  sheetSubtitle: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: COLORS.textSecondary, marginTop: 1,
+  },
+  sheetCloseBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: COLORS.background,
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  sheetStockBanner: {
+    flexDirection: "row", backgroundColor: COLORS.background,
+    borderRadius: 16, borderWidth: 1.5, borderColor: COLORS.border,
+    paddingVertical: 14, paddingHorizontal: 8,
+    marginBottom: 12,
+  },
+  sheetStockBlock: {
+    flex: 1, alignItems: "center", gap: 4,
+  },
+  sheetStockLabel: {
+    fontSize: 10, fontFamily: "Inter_500Medium", color: COLORS.textSecondary,
+    textTransform: "uppercase", letterSpacing: 0.8,
+  },
+  sheetStockValue: {
+    fontSize: 26, fontFamily: "Inter_700Bold",
+  },
+  sheetStockDivider: {
+    width: 1, backgroundColor: COLORS.border, marginVertical: 4,
+  },
+  sheetAlertBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#FEF3C7", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+    borderWidth: 1, borderColor: "#FDE68A",
+  },
+  sheetAlertText: {
+    fontSize: 13, fontFamily: "Inter_500Medium", color: "#92400E",
+  },
+  sheetActionSection: {
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 1.5, borderColor: COLORS.border,
+    marginBottom: 10, overflow: "hidden",
+  },
+  sheetActionHeader: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    padding: 14,
+  },
+  sheetActionIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    justifyContent: "center", alignItems: "center",
+  },
+  sheetActionLabel: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: COLORS.text,
+  },
+  sheetActionBody: {
+    paddingHorizontal: 14, paddingBottom: 14,
+    gap: 10,
+  },
+  sheetInputRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+  },
+  sheetHint: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: COLORS.textSecondary,
+  },
+  sheetTextInput: {
+    height: 48, borderRadius: 12,
+    borderWidth: 1.5, borderColor: COLORS.accent,
+    paddingHorizontal: 14, fontSize: 16,
+    fontFamily: "Inter_600SemiBold", color: COLORS.text,
+    backgroundColor: COLORS.background,
+  },
+  sheetActionBtn: {
+    height: 46, borderRadius: 12,
+    justifyContent: "center", alignItems: "center",
+    marginTop: 4,
+  },
+  sheetActionBtnText: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
   },
 });

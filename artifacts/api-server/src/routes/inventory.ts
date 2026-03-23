@@ -121,6 +121,89 @@ router.delete("/produits/:id", async (req, res) => {
   }
 });
 
+router.put("/produits/:id/ajuster-boutique", async (req, res) => {
+  try {
+    const produitId = parseInt(req.params.id);
+    const { nouvelleQuantite } = req.body as { nouvelleQuantite: number };
+
+    if (nouvelleQuantite === undefined || nouvelleQuantite < 0) {
+      res.status(400).json({ error: "Quantité invalide" });
+      return;
+    }
+
+    const [produit] = await db.select().from(produitsTable).where(eq(produitsTable.id, produitId)).limit(1);
+    if (!produit) { res.status(404).json({ error: "Produit non trouvé" }); return; }
+
+    const delta = nouvelleQuantite - produit.quantite;
+    let newReserve = produit.stockReserve;
+
+    if (delta > 0) {
+      if (produit.stockReserve < delta) {
+        res.status(400).json({ error: `Stock réserve insuffisant (disponible : ${produit.stockReserve})` });
+        return;
+      }
+      newReserve = produit.stockReserve - delta;
+    }
+
+    const [updated] = await db
+      .update(produitsTable)
+      .set({ quantite: nouvelleQuantite, stockReserve: newReserve })
+      .where(eq(produitsTable.id, produitId))
+      .returning();
+
+    await db.insert(mouvementsStockTable).values({
+      produitId,
+      typeMouvement: delta > 0 ? "reappro" : "correction",
+      quantite: Math.abs(delta),
+      stockBoutiqueAvant: produit.quantite,
+      stockBoutiqueApres: nouvelleQuantite,
+      stockReserveAvant: produit.stockReserve,
+      stockReserveApres: newReserve,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de l'ajustement" });
+  }
+});
+
+router.put("/produits/:id/ajuster-reserve", async (req, res) => {
+  try {
+    const produitId = parseInt(req.params.id);
+    const { nouvelleQuantite } = req.body as { nouvelleQuantite: number };
+
+    if (nouvelleQuantite === undefined || nouvelleQuantite < 0) {
+      res.status(400).json({ error: "Quantité invalide" });
+      return;
+    }
+
+    const [produit] = await db.select().from(produitsTable).where(eq(produitsTable.id, produitId)).limit(1);
+    if (!produit) { res.status(404).json({ error: "Produit non trouvé" }); return; }
+
+    const [updated] = await db
+      .update(produitsTable)
+      .set({ stockReserve: nouvelleQuantite })
+      .where(eq(produitsTable.id, produitId))
+      .returning();
+
+    await db.insert(mouvementsStockTable).values({
+      produitId,
+      typeMouvement: "correction",
+      quantite: Math.abs(nouvelleQuantite - produit.stockReserve),
+      stockBoutiqueAvant: produit.quantite,
+      stockBoutiqueApres: produit.quantite,
+      stockReserveAvant: produit.stockReserve,
+      stockReserveApres: nouvelleQuantite,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de l'ajustement" });
+  }
+});
+
 router.post("/produits/:id/reappro", async (req, res) => {
   try {
     const produitId = parseInt(req.params.id);

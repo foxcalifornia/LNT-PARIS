@@ -164,6 +164,16 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ quantite }),
       }),
+    ajusterBoutique: (id: number, nouvelleQuantite: number) =>
+      request<Produit>(`/produits/${id}/ajuster-boutique`, {
+        method: "PUT",
+        body: JSON.stringify({ nouvelleQuantite }),
+      }),
+    ajusterReserve: (id: number, nouvelleQuantite: number) =>
+      request<Produit>(`/produits/${id}/ajuster-reserve`, {
+        method: "PUT",
+        body: JSON.stringify({ nouvelleQuantite }),
+      }),
     createVente: (data: { produitId: number; quantiteVendue: number; typePaiement: string }) =>
       request<Vente>("/ventes", {
         method: "POST",
