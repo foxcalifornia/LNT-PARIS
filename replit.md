@@ -38,6 +38,17 @@ artifacts-monorepo/
 
 ## App Features (LNT Paris - Gestion de Stock)
 
+### Double Inventaire Boutique / Réserve
+- **DB** : champ `stock_reserve` ajouté à la table `produits` + nouvelle table `mouvements_stock` (traçabilité complète)
+- **Ventes** : décrément uniquement du stock boutique (`quantite`) — la réserve n'est pas touchée
+- **Réapprovisionnement** : `POST /api/produits/:id/reappro` — transfert réserve → boutique avec enregistrement mouvement
+- **Historique** : `GET /api/mouvements` — liste des mouvements (vente, reappro, annulation) avec avant/après pour les deux stocks
+- **Interface inventaire** :
+  - Stats header : Collections / Boutique total / Réserve total
+  - 3 onglets : Stock (édition inline B/R/Min), Alertes (vue manque avec bouton reappro direct), Historique
+  - Sur chaque produit : pillules **B** (boutique) et **R** (réserve) cliquables pour édition, icône ⬆ reappro, icône cible min
+  - Modal `ReapproModal` : sélecteur quantité, aperçu avant/après, validation stock réserve max
+
 ### Système d'Authentification
 - Écran de connexion au lancement avec choix de profil : **Admin** (mot de passe `1234`) ou **Vendeur** (mot de passe `5678`)
 - Contexte global `AuthContext` (no persistence — login requis à chaque lancement)

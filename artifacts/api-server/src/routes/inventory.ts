@@ -4,6 +4,7 @@ import {
   collectionsTable,
   produitsTable,
   ventesTable,
+  mouvementsStockTable,
   insertCollectionSchema,
   insertProduitSchema,
   insertVenteSchema,
@@ -76,13 +77,20 @@ router.post("/produits", async (req, res) => {
 router.put("/produits/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { quantite, couleur, prixCentimes, stockMinimum } = req.body;
+    const { quantite, couleur, prixCentimes, stockMinimum, stockReserve } = req.body;
 
-    const updateData: { quantite?: number; couleur?: string; prixCentimes?: number; stockMinimum?: number } = {};
+    const updateData: {
+      quantite?: number;
+      couleur?: string;
+      prixCentimes?: number;
+      stockMinimum?: number;
+      stockReserve?: number;
+    } = {};
     if (quantite !== undefined) updateData.quantite = quantite;
     if (couleur !== undefined) updateData.couleur = couleur;
     if (prixCentimes !== undefined) updateData.prixCentimes = prixCentimes;
     if (stockMinimum !== undefined) updateData.stockMinimum = stockMinimum;
+    if (stockReserve !== undefined) updateData.stockReserve = stockReserve;
 
     const [produit] = await db
       .update(produitsTable)
@@ -110,6 +118,86 @@ router.delete("/produits/:id", async (req, res) => {
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Erreur lors de la suppression" });
+  }
+});
+
+router.post("/produits/:id/reappro", async (req, res) => {
+  try {
+    const produitId = parseInt(req.params.id);
+    const { quantite } = req.body as { quantite: number };
+
+    if (!quantite || quantite <= 0) {
+      res.status(400).json({ error: "Quantité invalide" });
+      return;
+    }
+
+    const [produit] = await db
+      .select()
+      .from(produitsTable)
+      .where(eq(produitsTable.id, produitId))
+      .limit(1);
+
+    if (!produit) {
+      res.status(404).json({ error: "Produit non trouvé" });
+      return;
+    }
+
+    if (produit.stockReserve < quantite) {
+      res.status(400).json({ error: "Stock réserve insuffisant" });
+      return;
+    }
+
+    const newBoutique = produit.quantite + quantite;
+    const newReserve = produit.stockReserve - quantite;
+
+    const [updated] = await db
+      .update(produitsTable)
+      .set({ quantite: newBoutique, stockReserve: newReserve })
+      .where(eq(produitsTable.id, produitId))
+      .returning();
+
+    await db.insert(mouvementsStockTable).values({
+      produitId,
+      typeMouvement: "reappro",
+      quantite,
+      stockBoutiqueAvant: produit.quantite,
+      stockBoutiqueApres: newBoutique,
+      stockReserveAvant: produit.stockReserve,
+      stockReserveApres: newReserve,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors du réapprovisionnement" });
+  }
+});
+
+router.get("/mouvements", async (req, res) => {
+  try {
+    const mouvements = await db
+      .select({
+        id: mouvementsStockTable.id,
+        typeMouvement: mouvementsStockTable.typeMouvement,
+        quantite: mouvementsStockTable.quantite,
+        stockBoutiqueAvant: mouvementsStockTable.stockBoutiqueAvant,
+        stockBoutiqueApres: mouvementsStockTable.stockBoutiqueApres,
+        stockReserveAvant: mouvementsStockTable.stockReserveAvant,
+        stockReserveApres: mouvementsStockTable.stockReserveApres,
+        createdAt: mouvementsStockTable.createdAt,
+        couleur: produitsTable.couleur,
+        collectionNom: collectionsTable.nom,
+      })
+      .from(mouvementsStockTable)
+      .innerJoin(produitsTable, eq(mouvementsStockTable.produitId, produitsTable.id))
+      .innerJoin(collectionsTable, eq(produitsTable.collectionId, collectionsTable.id))
+      .orderBy(desc(mouvementsStockTable.createdAt))
+      .limit(200);
+
+    res.json(mouvements);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la récupération des mouvements" });
   }
 });
 
@@ -142,10 +230,21 @@ router.post("/ventes", async (req, res) => {
       montantCentimes,
     }).returning();
 
+    const newBoutique = stockActuel - quantiteVendue;
     await db
       .update(produitsTable)
-      .set({ quantite: stockActuel - quantiteVendue })
+      .set({ quantite: newBoutique })
       .where(eq(produitsTable.id, produitId));
+
+    await db.insert(mouvementsStockTable).values({
+      produitId,
+      typeMouvement: "vente",
+      quantite: quantiteVendue,
+      stockBoutiqueAvant: stockActuel,
+      stockBoutiqueApres: newBoutique,
+      stockReserveAvant: produit[0].stockReserve,
+      stockReserveApres: produit[0].stockReserve,
+    });
 
     res.status(201).json(vente);
   } catch (error) {
@@ -184,11 +283,12 @@ router.post("/ventes/batch", async (req, res) => {
         return;
       }
       if (produit.quantite < item.quantite) {
-        res.status(400).json({ error: `Stock insuffisant pour produit ${item.produitId}` });
+        res.status(400).json({ error: `Stock boutique insuffisant pour ${produit.couleur}` });
         return;
       }
 
       const montantCentimes = produit.prixCentimes * item.quantite;
+      const newBoutique = produit.quantite - item.quantite;
 
       await db.insert(ventesTable).values({
         produitId: item.produitId,
@@ -199,8 +299,18 @@ router.post("/ventes/batch", async (req, res) => {
 
       await db
         .update(produitsTable)
-        .set({ quantite: produit.quantite - item.quantite })
+        .set({ quantite: newBoutique })
         .where(eq(produitsTable.id, item.produitId));
+
+      await db.insert(mouvementsStockTable).values({
+        produitId: item.produitId,
+        typeMouvement: "vente",
+        quantite: item.quantite,
+        stockBoutiqueAvant: produit.quantite,
+        stockBoutiqueApres: newBoutique,
+        stockReserveAvant: produit.stockReserve,
+        stockReserveApres: produit.stockReserve,
+      });
 
       totalArticles += item.quantite;
     }

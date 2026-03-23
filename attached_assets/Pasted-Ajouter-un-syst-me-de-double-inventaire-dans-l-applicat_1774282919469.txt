@@ -1,0 +1,106 @@
+Ajouter un système de double inventaire dans l’application.
+
+Objectif :
+Avoir deux inventaires distincts pour chaque produit :
+
+1. Inventaire boutique
+2. Inventaire réserve
+
+La structure des produits reste la même que dans l’inventaire actuel, mais chaque produit doit maintenant avoir deux quantités séparées :
+- stock boutique
+- stock réserve
+
+1. Logique de l’inventaire boutique
+- L’inventaire boutique correspond au stock disponible en magasin pour la vente immédiate.
+- À chaque vente, c’est uniquement le stock boutique qui doit être décrémenté.
+- Le stock réserve ne doit pas être modifié lors d’une vente directe.
+
+Exemple :
+- Mykonos Bleu
+- Stock boutique : 8
+- Stock réserve : 20
+
+Si je vends 2 paires :
+- Stock boutique devient 6
+- Stock réserve reste 20
+
+2. Logique de l’inventaire réserve
+- L’inventaire réserve correspond au stock de réassort disponible en arrière-boutique / réserve.
+- Lorsqu’on réapprovisionne la boutique depuis la réserve, le stock réserve doit diminuer.
+- En parallèle, le stock boutique doit augmenter.
+
+Exemple :
+- Mykonos Bleu
+- Stock boutique : 8
+- Stock réserve : 20
+
+Si je réapprovisionne la boutique de 5 paires depuis la réserve :
+- Stock boutique devient 13
+- Stock réserve devient 15
+
+3. Fonction de réapprovisionnement
+Ajouter une fonctionnalité de réapprovisionnement entre les deux inventaires.
+
+Pour chaque produit, permettre de :
+- voir le stock boutique
+- voir le stock réserve
+- transférer une quantité de la réserve vers la boutique
+
+Règles :
+- impossible de transférer plus que le stock disponible en réserve
+- chaque réapprovisionnement doit mettre à jour immédiatement les deux stocks
+- enregistrer ce mouvement dans la base de données
+
+4. Historique des mouvements
+Ajouter un historique des mouvements de stock pour garder une traçabilité.
+
+Enregistrer au minimum :
+- date
+- heure
+- produit
+- quantité transférée
+- stock boutique avant / après
+- stock réserve avant / après
+- type de mouvement :
+  - vente
+  - réapprovisionnement boutique depuis réserve
+  - annulation de vente si applicable
+
+5. Affichage dans l’inventaire
+Dans la section Inventaire, pour chaque produit, afficher clairement :
+- nom du produit
+- collection
+- stock boutique
+- stock réserve
+- stock minimum boutique si déjà prévu dans l’application
+- besoin de réapprovisionnement si le stock boutique est trop bas
+
+6. Logique de stock minimum
+Le stock minimum doit s’appliquer au stock boutique.
+
+Exemple :
+- Stock minimum boutique : 30
+- Stock boutique actuel : 20
+- L’application doit indiquer qu’il manque 10 pièces en boutique
+
+Ensuite, si le stock réserve est disponible, le vendeur ou l’admin peut faire un réapprovisionnement interne depuis la réserve.
+
+7. Interface
+L’interface doit rester simple et lisible.
+
+Dans l’inventaire, afficher pour chaque produit :
+- Boutique
+- Réserve
+- Minimum boutique
+- Manque
+- Action “Réapprovisionner”
+
+8. Objectif final
+Je veux une gestion claire avec deux niveaux de stock :
+
+- les ventes diminuent uniquement l’inventaire boutique
+- le réapprovisionnement diminue l’inventaire réserve et augmente l’inventaire boutique
+
+Cela doit permettre de distinguer :
+- ce qui est disponible immédiatement en magasin
+- ce qui reste en stock en réserve

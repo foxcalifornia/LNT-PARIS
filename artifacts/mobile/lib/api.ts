@@ -39,6 +39,7 @@ export type Produit = {
   collectionId: number;
   couleur: string;
   quantite: number;
+  stockReserve: number;
   prixCentimes: number;
   stockMinimum: number;
   createdAt: string;
@@ -102,6 +103,19 @@ export type Consommable = {
   createdAt: string;
 };
 
+export type MouvementStock = {
+  id: number;
+  typeMouvement: "vente" | "reappro" | "annulation";
+  quantite: number;
+  stockBoutiqueAvant: number;
+  stockBoutiqueApres: number;
+  stockReserveAvant: number;
+  stockReserveApres: number;
+  createdAt: string;
+  couleur: string;
+  collectionNom: string;
+};
+
 export function formatPrix(centimes: number): string {
   return `€${(centimes / 100).toFixed(2).replace(".", ",")}`;
 }
@@ -138,13 +152,18 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    updateProduit: (id: number, data: { quantite?: number; couleur?: string; prixCentimes?: number; stockMinimum?: number }) =>
+    updateProduit: (id: number, data: { quantite?: number; couleur?: string; prixCentimes?: number; stockMinimum?: number; stockReserve?: number }) =>
       request<Produit>(`/produits/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       }),
     deleteProduit: (id: number) =>
       request<{ message: string }>(`/produits/${id}`, { method: "DELETE" }),
+    reapprovisionnement: (id: number, quantite: number) =>
+      request<Produit>(`/produits/${id}/reappro`, {
+        method: "POST",
+        body: JSON.stringify({ quantite }),
+      }),
     createVente: (data: { produitId: number; quantiteVendue: number; typePaiement: string }) =>
       request<Vente>("/ventes", {
         method: "POST",
@@ -161,6 +180,7 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       }),
+    getMouvements: () => request<MouvementStock[]>("/mouvements"),
   },
   reporting: {
     getDaily: () => request<JourReport[]>("/reporting/daily"),
