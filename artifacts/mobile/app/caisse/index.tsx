@@ -581,9 +581,6 @@ function ActiveCaisseView({
             )}
           </View>
         </View>
-        <Pressable onPress={onClose} style={styles.closeSessionBtn}>
-          <Feather name="log-out" size={17} color={COLORS.textSecondary} />
-        </Pressable>
       </View>
 
       <ScrollView
