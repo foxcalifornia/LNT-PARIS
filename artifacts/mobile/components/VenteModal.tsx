@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -23,6 +23,8 @@ import {
 
 const COLORS = Colors.light;
 
+type View = "collections" | "produits" | "paiement";
+
 type Props = {
   visible: boolean;
   collections: CollectionWithProduits[];
@@ -36,18 +38,20 @@ type Props = {
 
 export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose, onPayCarte }: Props) {
   const insets = useSafeAreaInsets();
+  const [view, setView] = useState<View>("collections");
+  const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
   const [search, setSearch] = useState("");
 
-  const color = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
-
   const totalItems = cart.reduce((sum, i) => sum + i.quantite, 0);
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
   const promo = computePromo(cart);
   const totalFinal = totalCentimes - promo.discountCentimes;
+
+  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
   const getCartQty = (produitId: number) =>
     cart.find((i) => i.produit.id === produitId)?.quantite ?? 0;
@@ -67,10 +71,36 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     onCartChange(newCart);
   };
 
+  const handleClose = () => {
+    setView("collections");
+    setSelectedCollection(null);
+    setPaymentMode(defaultPaymentMode ?? null);
+    setSuccess(false);
+    setSuccessSnapshot(null);
+    setSearch("");
+    onClose();
+  };
+
+  const openCollection = (col: CollectionWithProduits) => {
+    Haptics.selectionAsync();
+    setSelectedCollection(col);
+    setSearch("");
+    setView("produits");
+  };
+
+  const goBack = () => {
+    if (view === "paiement") {
+      setView(selectedCollection ? "produits" : "collections");
+    } else if (view === "produits") {
+      setSelectedCollection(null);
+      setView("collections");
+    }
+  };
+
   const handleConfirmCarte = () => {
     if (cart.length === 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onClose();
+    handleClose();
     onPayCarte?.();
   };
 
@@ -90,6 +120,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
         setSuccess(false);
         setSuccessSnapshot(null);
         onCartChange([]);
+        setView("collections");
+        setSelectedCollection(null);
         setPaymentMode(defaultPaymentMode ?? null);
         setSearch("");
         onClose();
@@ -99,367 +131,515 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     }
   };
 
-  const handleClose = () => {
-    setPaymentMode(defaultPaymentMode ?? null);
-    setSuccess(false);
-    setSuccessSnapshot(null);
-    setSearch("");
-    onClose();
-  };
-
-  const filteredCollections = useMemo(() => {
+  const searchResults = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return collections;
-    return collections
-      .map((col) => ({
-        ...col,
-        produits: col.produits.filter(
-          (p) =>
-            p.couleur.toLowerCase().includes(q) ||
-            col.nom.toLowerCase().includes(q)
-        ),
-      }))
-      .filter((col) => col.produits.length > 0);
+    if (!q) return null;
+    const results: Array<{ produit: Produit & { collectionNom: string }; collection: CollectionWithProduits }> = [];
+    for (const col of collections) {
+      for (const p of col.produits) {
+        if (
+          p.couleur.toLowerCase().includes(q) ||
+          col.nom.toLowerCase().includes(q) ||
+          `${col.nom} ${p.couleur}`.toLowerCase().includes(q)
+        ) {
+          results.push({ produit: { ...p, collectionNom: col.nom }, collection: col });
+        }
+      }
+    }
+    return results;
   }, [collections, search]);
+
+  const headerTitle =
+    view === "paiement"
+      ? "Paiement"
+      : view === "produits"
+      ? selectedCollection?.nom ?? ""
+      : search ? "Résultats de recherche"
+      : "Nouvelle Vente";
+
+  const showBack = view === "produits" || view === "paiement";
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
-      <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }]}>
-        <View style={styles.sheet}>
+      <View style={[styles.overlay, { paddingTop: insets.top }]}>
 
-          <View style={styles.sheetHeader}>
-            <View style={{ width: 36 }} />
-            <Text style={styles.sheetTitle} numberOfLines={1}>Nouvelle Vente</Text>
-            <Pressable onPress={handleClose} style={styles.navBtn}>
-              <Feather name="x" size={18} color={COLORS.textSecondary} />
+        {/* Header */}
+        <View style={styles.sheetHeader}>
+          {showBack ? (
+            <Pressable onPress={goBack} style={styles.navBtn}>
+              <Feather name="arrow-left" size={20} color={COLORS.text} />
             </Pressable>
+          ) : (
+            <View style={{ width: 36 }} />
+          )}
+          <Text style={styles.sheetTitle} numberOfLines={1}>{headerTitle}</Text>
+          <Pressable onPress={handleClose} style={styles.navBtn}>
+            <Feather name="x" size={18} color={COLORS.textSecondary} />
+          </Pressable>
+        </View>
+
+        {success ? (
+          <View style={styles.successContainer}>
+            <View style={[styles.successIcon, { backgroundColor: confirmColor + "20" }]}>
+              <Feather name="check-circle" size={48} color={confirmColor} />
+            </View>
+            <Text style={[styles.successText, { color: confirmColor }]}>Vente enregistrée !</Text>
+            <Text style={styles.successSub}>
+              {successSnapshot?.items ?? 0} article{(successSnapshot?.items ?? 0) > 1 ? "s" : ""}
+              {successSnapshot && successSnapshot.total > 0 ? ` · ${formatPrix(successSnapshot.total)}` : ""}
+            </Text>
           </View>
 
-          {success ? (
-            <View style={styles.successContainer}>
-              <View style={[styles.successIcon, { backgroundColor: color + "20" }]}>
-                <Feather name="check-circle" size={48} color={color} />
-              </View>
-              <Text style={[styles.successText, { color }]}>Vente enregistrée !</Text>
-              <Text style={styles.successSub}>
-                {successSnapshot?.items ?? 0} article{(successSnapshot?.items ?? 0) > 1 ? "s" : ""}
-                {successSnapshot && successSnapshot.total > 0 ? ` · ${formatPrix(successSnapshot.total)}` : ""}
-              </Text>
-            </View>
-          ) : (
-            <AllProduitsView
-              collections={filteredCollections}
-              cart={cart}
-              color={color}
-              promo={promo}
-              search={search}
-              onSearchChange={setSearch}
-              getCartQty={getCartQty}
-              updateCart={updateCart}
-            />
-          )}
+        ) : view === "paiement" ? (
+          <PaymentView
+            totalItems={totalItems}
+            totalCentimes={totalCentimes}
+            totalFinal={totalFinal}
+            promo={promo}
+            cart={cart}
+            paymentMode={paymentMode}
+            onSelectPayment={setPaymentMode}
+            loading={loading}
+            onConfirm={handleConfirm}
+            onUpdateCart={updateCart}
+            getCartQty={getCartQty}
+            insets={insets}
+          />
 
-          {!success && cart.length > 0 && (
-            <CartFooter
-              totalItems={totalItems}
-              totalCentimes={totalCentimes}
-              totalFinal={totalFinal}
-              promo={promo}
-              paymentMode={paymentMode}
-              onSelectPayment={setPaymentMode}
-              loading={loading}
-              onConfirm={handleConfirm}
-            />
-          )}
-        </View>
+        ) : view === "produits" && selectedCollection ? (
+          <ProduitsView
+            collection={selectedCollection}
+            cart={cart}
+            promo={promo}
+            totalItems={totalItems}
+            totalFinal={totalFinal}
+            getCartQty={getCartQty}
+            updateCart={updateCart}
+            onPay={() => setView("paiement")}
+            insets={insets}
+          />
+
+        ) : (
+          <CollectionsView
+            collections={collections}
+            cart={cart}
+            totalItems={totalItems}
+            totalFinal={totalFinal}
+            search={search}
+            onSearchChange={setSearch}
+            searchResults={searchResults}
+            onOpen={openCollection}
+            onPay={() => setView("paiement")}
+            getCartQty={getCartQty}
+            updateCart={updateCart}
+            promo={promo}
+            insets={insets}
+          />
+        )}
       </View>
     </Modal>
   );
 }
 
-function AllProduitsView({
+function CollectionsView({
   collections,
   cart,
-  color,
-  promo,
+  totalItems,
+  totalFinal,
   search,
   onSearchChange,
+  searchResults,
+  onOpen,
+  onPay,
   getCartQty,
   updateCart,
+  promo,
+  insets,
 }: {
   collections: CollectionWithProduits[];
   cart: CartItem[];
-  color: string;
-  promo: PromoResult;
+  totalItems: number;
+  totalFinal: number;
   search: string;
   onSearchChange: (v: string) => void;
+  searchResults: Array<{ produit: Produit & { collectionNom: string }; collection: CollectionWithProduits }> | null;
+  onOpen: (col: CollectionWithProduits) => void;
+  onPay: () => void;
   getCartQty: (id: number) => number;
   updateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
+  promo: PromoResult;
+  insets: { bottom: number };
 }) {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-
-  const isSearching = search.trim().length > 0;
-
-  useEffect(() => {
-    if (isSearching) {
-      setExpandedIds(new Set(collections.map((c) => c.id)));
-    }
-  }, [isSearching, collections]);
-
-  const toggleCollection = (id: number) => {
-    Haptics.selectionAsync();
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const freeCountByProduct = new Map<number, number>();
   for (const fd of promo.freeDetails) {
     freeCountByProduct.set(fd.produitId, fd.count);
   }
 
-  const hasAny = collections.some((c) => c.produits.length > 0);
-
   return (
-    <>
+    <View style={styles.flex}>
       <View style={styles.searchBar}>
         <Feather name="search" size={15} color={COLORS.textSecondary} />
         <TextInput
           style={styles.searchInput}
           value={search}
           onChangeText={onSearchChange}
-          placeholder="Rechercher une couleur ou collection…"
+          placeholder="Rechercher collection ou produit…"
           placeholderTextColor={COLORS.textSecondary}
           returnKeyType="search"
           clearButtonMode="while-editing"
         />
       </View>
 
-      <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {!hasAny && (
-          <Text style={styles.emptyText}>Aucun produit trouvé</Text>
-        )}
-        {collections.map((col) => {
-          if (col.produits.length === 0) return null;
-          const available = col.produits.filter((p) => p.quantite > 0).length;
-          const isExpanded = isSearching || expandedIds.has(col.id);
-          const inCartCount = cart
-            .filter((i) => i.produit.collectionNom === col.nom)
-            .reduce((s, i) => s + i.quantite, 0);
-
-          return (
-            <View key={col.id} style={styles.collectionSection}>
-              <Pressable
-                style={[styles.collectionHeader, isExpanded && styles.collectionHeaderExpanded]}
-                onPress={() => toggleCollection(col.id)}
-              >
-                <View style={[styles.collectionIconBg, { backgroundColor: color + "18" }]}>
-                  <Feather name="layers" size={14} color={color} />
-                </View>
-                <Text style={styles.collectionName}>{col.nom}</Text>
-                <View style={styles.collectionHeaderRight}>
-                  {inCartCount > 0 && (
-                    <View style={[styles.badge, { backgroundColor: color }]}>
-                      <Text style={styles.badgeText}>{inCartCount}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.collectionSub}>
-                    {available}/{col.produits.length}
-                  </Text>
-                  <Feather
-                    name={isExpanded ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={COLORS.textSecondary}
-                  />
-                </View>
-              </Pressable>
-
-              {isExpanded && col.produits.map((p) => {
-                const produitWithCol = { ...p, collectionNom: col.nom };
-                const cartQty = getCartQty(p.id);
-                const freeQty = freeCountByProduct.get(p.id) ?? 0;
-                const isEmpty = p.quantite === 0;
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {searchResults !== null ? (
+          <>
+            {searchResults.length === 0 ? (
+              <Text style={styles.emptyText}>Aucun produit trouvé</Text>
+            ) : (
+              searchResults.map(({ produit, collection }) => {
+                const cartQty = getCartQty(produit.id);
+                const freeQty = freeCountByProduct.get(produit.id) ?? 0;
+                const isEmpty = produit.quantite === 0;
                 const isSelected = cartQty > 0;
                 return (
-                  <View
-                    key={p.id}
-                    style={[
-                      styles.productRow,
-                      isEmpty && styles.rowDisabled,
-                      isSelected && { borderColor: color, backgroundColor: color + "07" },
-                    ]}
-                  >
-                    <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
-                    <View style={styles.productInfo}>
-                      <View style={styles.productNameRow}>
-                        <Text style={[styles.productName, isEmpty && { color: COLORS.textSecondary }]}>
-                          {col.nom} {p.couleur}
-                        </Text>
-                        {freeQty > 0 && (
-                          <View style={styles.freeBadge}>
-                            <Feather name="gift" size={11} color="#fff" />
-                            <Text style={styles.freeBadgeText}>
-                              {freeQty > 1 ? `${freeQty}x ` : ""}offerte
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.productMeta}>
-                        {p.prixCentimes > 0 && (
-                          <Text style={[styles.productPrice, { color: isSelected ? color : COLORS.accent }]}>
-                            {formatPrix(p.prixCentimes)}
-                          </Text>
-                        )}
-                        <Text
-                          style={[
-                            styles.productStock,
-                            isEmpty
-                              ? { color: COLORS.danger }
-                              : p.quantite <= 2
-                              ? { color: "#F59E0B" }
-                              : { color: COLORS.success },
-                          ]}
-                        >
-                          {p.quantite} en stock
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
-                      <Pressable
-                        style={[styles.qtyBtn, { borderColor: cartQty > 0 ? color : COLORS.border }]}
-                        onPress={() => updateCart(produitWithCol, -1)}
-                        disabled={cartQty === 0 || isEmpty}
-                      >
-                        <Feather
-                          name="minus"
-                          size={15}
-                          color={cartQty > 0 ? color : COLORS.textSecondary}
-                        />
-                      </Pressable>
-                      <Text style={[styles.qtyValue, isSelected && { color }]}>{cartQty}</Text>
-                      <Pressable
-                        style={[
-                          styles.qtyBtn,
-                          { borderColor: cartQty < p.quantite && !isEmpty ? color : COLORS.border },
-                        ]}
-                        onPress={() => updateCart(produitWithCol, +1)}
-                        disabled={cartQty >= p.quantite || isEmpty}
-                      >
-                        <Feather
-                          name="plus"
-                          size={15}
-                          color={
-                            cartQty < p.quantite && !isEmpty ? color : COLORS.textSecondary
-                          }
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
+                  <SearchProductRow
+                    key={produit.id}
+                    produit={produit}
+                    collection={collection}
+                    cartQty={cartQty}
+                    freeQty={freeQty}
+                    isEmpty={isEmpty}
+                    isSelected={isSelected}
+                    onAdd={() => updateCart(produit, +1)}
+                    onRemove={() => updateCart(produit, -1)}
+                  />
                 );
-              })}
-            </View>
-          );
-        })}
-        <View style={{ height: 16 }} />
+              })
+            )}
+          </>
+        ) : (
+          <>
+            {collections.length === 0 && (
+              <Text style={styles.emptyText}>Aucune collection disponible</Text>
+            )}
+            {collections.map((col) => {
+              const available = col.produits.filter((p) => p.quantite > 0).length;
+              const inCart = cart
+                .filter((i) => i.produit.collectionNom === col.nom)
+                .reduce((s, i) => s + i.quantite, 0);
+              const hasStock = available > 0;
+              return (
+                <Pressable
+                  key={col.id}
+                  style={({ pressed }) => [
+                    styles.collectionCard,
+                    !hasStock && styles.collectionCardDisabled,
+                    { opacity: pressed && hasStock ? 0.88 : 1 },
+                  ]}
+                  onPress={() => hasStock && onOpen(col)}
+                  disabled={!hasStock}
+                >
+                  <View style={[styles.collectionCardIcon, { backgroundColor: COLORS.accent + "18" }]}>
+                    <Feather name="layers" size={22} color={COLORS.accent} />
+                  </View>
+                  <View style={styles.collectionCardContent}>
+                    <Text style={[styles.collectionCardName, !hasStock && { color: COLORS.textSecondary }]}>
+                      {col.nom}
+                    </Text>
+                    <Text style={styles.collectionCardSub}>
+                      {available > 0
+                        ? `${available} modèle${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""}`
+                        : "Rupture de stock"}
+                    </Text>
+                  </View>
+                  <View style={styles.collectionCardRight}>
+                    {inCart > 0 && (
+                      <View style={styles.cartBadge}>
+                        <Text style={styles.cartBadgeText}>{inCart}</Text>
+                      </View>
+                    )}
+                    <Feather
+                      name="chevron-right"
+                      size={20}
+                      color={hasStock ? COLORS.textSecondary : COLORS.border}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </>
+        )}
+        <View style={{ height: totalItems > 0 ? 80 : 16 }} />
       </ScrollView>
-    </>
+
+      {totalItems > 0 && (
+        <StickyCartBar
+          totalItems={totalItems}
+          totalFinal={totalFinal}
+          onPay={onPay}
+          insets={insets}
+        />
+      )}
+    </View>
   );
 }
 
-function CartFooter({
+function ProduitsView({
+  collection,
+  cart,
+  promo,
+  totalItems,
+  totalFinal,
+  getCartQty,
+  updateCart,
+  onPay,
+  insets,
+}: {
+  collection: CollectionWithProduits;
+  cart: CartItem[];
+  promo: PromoResult;
+  totalItems: number;
+  totalFinal: number;
+  getCartQty: (id: number) => number;
+  updateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
+  onPay: () => void;
+  insets: { bottom: number };
+}) {
+  const freeCountByProduct = new Map<number, number>();
+  for (const fd of promo.freeDetails) {
+    freeCountByProduct.set(fd.produitId, fd.count);
+  }
+
+  return (
+    <View style={styles.flex}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {collection.produits.map((p) => {
+          const produitWithCol = { ...p, collectionNom: collection.nom };
+          const cartQty = getCartQty(p.id);
+          const freeQty = freeCountByProduct.get(p.id) ?? 0;
+          const isEmpty = p.quantite === 0;
+          const isSelected = cartQty > 0;
+          return (
+            <View
+              key={p.id}
+              style={[
+                styles.productCard,
+                isEmpty && styles.productCardEmpty,
+                isSelected && styles.productCardSelected,
+              ]}
+            >
+              <View style={styles.productCardTop}>
+                <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
+                <View style={styles.productCardInfo}>
+                  <View style={styles.productNameRow}>
+                    <Text style={[styles.productCardName, isEmpty && { color: COLORS.textSecondary }]}>
+                      {collection.nom} {p.couleur}
+                    </Text>
+                    {freeQty > 0 && (
+                      <View style={styles.freeBadge}>
+                        <Feather name="gift" size={11} color="#fff" />
+                        <Text style={styles.freeBadgeText}>
+                          {freeQty > 1 ? `${freeQty}x ` : ""}offerte
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.productMeta}>
+                    {p.prixCentimes > 0 && (
+                      <Text style={[styles.productPrice, { color: isSelected ? COLORS.accent : COLORS.accent }]}>
+                        {formatPrix(p.prixCentimes)}
+                      </Text>
+                    )}
+                    <Text
+                      style={[
+                        styles.productStock,
+                        isEmpty
+                          ? { color: COLORS.danger }
+                          : p.quantite <= 2
+                          ? { color: "#F59E0B" }
+                          : { color: COLORS.success },
+                      ]}
+                    >
+                      {isEmpty ? "Rupture de stock" : `${p.quantite} en stock`}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
+                <Pressable
+                  style={[
+                    styles.qtyBtn,
+                    cartQty > 0
+                      ? { borderColor: COLORS.accent, backgroundColor: COLORS.accent + "10" }
+                      : { borderColor: COLORS.border },
+                  ]}
+                  onPress={() => updateCart(produitWithCol, -1)}
+                  disabled={cartQty === 0 || isEmpty}
+                >
+                  <Feather name="minus" size={16} color={cartQty > 0 ? COLORS.accent : COLORS.textSecondary} />
+                </Pressable>
+                <Text style={[styles.qtyValue, isSelected && { color: COLORS.accent }]}>{cartQty}</Text>
+                <Pressable
+                  style={[
+                    styles.qtyBtn,
+                    cartQty < p.quantite && !isEmpty
+                      ? { borderColor: COLORS.accent, backgroundColor: COLORS.accent + "10" }
+                      : { borderColor: COLORS.border },
+                  ]}
+                  onPress={() => updateCart(produitWithCol, +1)}
+                  disabled={cartQty >= p.quantite || isEmpty}
+                >
+                  <Feather
+                    name="plus"
+                    size={16}
+                    color={cartQty < p.quantite && !isEmpty ? COLORS.accent : COLORS.textSecondary}
+                  />
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+        <View style={{ height: totalItems > 0 ? 80 : 16 }} />
+      </ScrollView>
+
+      {totalItems > 0 && (
+        <StickyCartBar
+          totalItems={totalItems}
+          totalFinal={totalFinal}
+          onPay={onPay}
+          insets={insets}
+        />
+      )}
+    </View>
+  );
+}
+
+function PaymentView({
   totalItems,
   totalCentimes,
   totalFinal,
   promo,
+  cart,
   paymentMode,
   onSelectPayment,
   loading,
   onConfirm,
+  onUpdateCart,
+  getCartQty,
+  insets,
 }: {
   totalItems: number;
   totalCentimes: number;
   totalFinal: number;
   promo: PromoResult;
+  cart: CartItem[];
   paymentMode: "cash" | "carte" | null;
   onSelectPayment: (mode: "cash" | "carte") => void;
   loading: boolean;
   onConfirm: () => void;
-  onPayCarte?: () => void;
+  onUpdateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
+  getCartQty: (id: number) => number;
+  insets: { bottom: number };
 }) {
-  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
   const hasPromo = promo.nbFree > 0;
+  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
   return (
-    <View style={styles.cartFooter}>
-      <View style={styles.cartSummary}>
+    <ScrollView
+      contentContainerStyle={[styles.paymentContent, { paddingBottom: Math.max(insets.bottom, 24) }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Cart items */}
+      <Text style={styles.paymentSectionLabel}>Articles dans le panier</Text>
+      {cart.map((item) => (
+        <View key={item.produit.id} style={styles.cartItem}>
+          <View style={[styles.colorDot, { backgroundColor: getColorHex(item.produit.couleur) }]} />
+          <View style={styles.flex}>
+            <Text style={styles.cartItemName} numberOfLines={1}>
+              {item.produit.collectionNom} {item.produit.couleur}
+            </Text>
+            <Text style={styles.cartItemPrice}>{formatPrix(item.produit.prixCentimes)}</Text>
+          </View>
+          <View style={styles.qtyControlSmall}>
+            <Pressable
+              style={styles.qtyBtnSmall}
+              onPress={() => onUpdateCart(item.produit, -1)}
+            >
+              <Feather name="minus" size={14} color={COLORS.accent} />
+            </Pressable>
+            <Text style={styles.qtyValueSmall}>{item.quantite}</Text>
+            <Pressable
+              style={styles.qtyBtnSmall}
+              onPress={() => onUpdateCart(item.produit, +1)}
+              disabled={getCartQty(item.produit.id) >= item.produit.quantite}
+            >
+              <Feather name="plus" size={14} color={COLORS.accent} />
+            </Pressable>
+          </View>
+        </View>
+      ))}
+
+      {/* Totals */}
+      <View style={styles.totalsCard}>
         {hasPromo ? (
           <>
-            <View style={styles.cartSummaryRow}>
-              <Text style={styles.cartSummaryLabel}>
-                {totalItems} article{totalItems !== 1 ? "s" : ""}
-              </Text>
-              <Text style={styles.cartSummaryValue}>{formatPrix(totalCentimes)}</Text>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>{totalItems} article{totalItems !== 1 ? "s" : ""}</Text>
+              <Text style={styles.totalValue}>{formatPrix(totalCentimes)}</Text>
             </View>
-
-            <View style={styles.promoBanner}>
-              <View style={styles.promoBannerLeft}>
+            <View style={styles.promoRow}>
+              <View style={styles.promoRowLeft}>
                 <Feather name="gift" size={14} color={COLORS.promo} />
-                <Text style={styles.promoBannerTitle}>
+                <Text style={styles.promoLabel}>
                   Promo 2+1 · {promo.nbFree} paire{promo.nbFree > 1 ? "s" : ""} offerte{promo.nbFree > 1 ? "s" : ""}
                 </Text>
               </View>
               <Text style={styles.promoDiscount}>-{formatPrix(promo.discountCentimes)}</Text>
             </View>
-
-            {promo.freeDetails.map((fd) => (
-              <View key={fd.produitId} style={styles.promoDetailRow}>
-                <Feather name="check" size={12} color={COLORS.promo} />
-                <Text style={styles.promoDetailText} numberOfLines={1}>
-                  {fd.count > 1 ? `${fd.count}× ` : ""}{fd.collectionNom} – {fd.couleur}
-                </Text>
-                <Text style={styles.promoDetailPrice}>
-                  {fd.count > 1 ? `${formatPrix(fd.prixCentimes)} × ${fd.count}` : formatPrix(fd.prixCentimes)}
-                </Text>
-              </View>
-            ))}
-
-            <View style={[styles.cartSummaryRow, styles.cartTotalRow]}>
-              <Text style={styles.cartTotalLabel}>Total</Text>
-              <Text style={[styles.cartTotalValue, { color: confirmColor }]}>{formatPrix(totalFinal)}</Text>
+            <View style={[styles.totalRow, styles.totalFinalRow]}>
+              <Text style={styles.totalFinalLabel}>Total</Text>
+              <Text style={[styles.totalFinalValue, { color: confirmColor }]}>{formatPrix(totalFinal)}</Text>
             </View>
           </>
         ) : (
-          <View style={styles.cartInfo}>
-            <Text style={styles.cartItemCount}>
-              {totalItems} article{totalItems !== 1 ? "s" : ""}
-            </Text>
-            {totalCentimes > 0 && (
-              <Text style={[styles.cartTotal, { color: confirmColor }]}>{formatPrix(totalCentimes)}</Text>
-            )}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalFinalLabel}>Total ({totalItems} article{totalItems !== 1 ? "s" : ""})</Text>
+            <Text style={[styles.totalFinalValue, { color: confirmColor }]}>{formatPrix(totalCentimes)}</Text>
           </View>
         )}
       </View>
 
+      {/* Payment mode */}
+      <Text style={styles.paymentSectionLabel}>Mode de paiement</Text>
       <View style={styles.paymentRow}>
         <Pressable
-          style={[styles.payModeBtn, paymentMode === "cash" && styles.payModeBtnCash]}
+          style={[styles.payModeBtn, paymentMode === "cash" && { backgroundColor: COLORS.cash, borderColor: COLORS.cash }]}
           onPress={() => { Haptics.selectionAsync(); onSelectPayment("cash"); }}
         >
-          <Feather name="dollar-sign" size={16} color={paymentMode === "cash" ? "#fff" : COLORS.cash} />
+          <Feather name="dollar-sign" size={18} color={paymentMode === "cash" ? "#fff" : COLORS.cash} />
           <Text style={[styles.payModeBtnText, paymentMode === "cash" && { color: "#fff" }]}>Cash</Text>
         </Pressable>
         <Pressable
-          style={[styles.payModeBtn, paymentMode === "carte" && styles.payModeBtnCarte]}
+          style={[styles.payModeBtn, paymentMode === "carte" && { backgroundColor: COLORS.card_payment, borderColor: COLORS.card_payment }]}
           onPress={() => { Haptics.selectionAsync(); onSelectPayment("carte"); }}
         >
-          <Feather name="credit-card" size={16} color={paymentMode === "carte" ? "#fff" : COLORS.card_payment} />
-          <Text style={[styles.payModeBtnText, paymentMode === "carte" && { color: "#fff" }]}>Carte</Text>
+          <Feather name="credit-card" size={18} color={paymentMode === "carte" ? "#fff" : COLORS.card_payment} />
+          <Text style={[styles.payModeBtnText, paymentMode === "carte" && { color: "#fff" }]}>Carte SumUp</Text>
         </Pressable>
       </View>
 
+      {/* Confirm */}
       <Pressable
         style={[styles.confirmBtn, { backgroundColor: confirmColor }, (loading || !paymentMode) && { opacity: 0.45 }]}
         onPress={onConfirm}
@@ -469,11 +649,7 @@ function CartFooter({
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <>
-            <Feather
-              name={paymentMode === "carte" ? "credit-card" : "check"}
-              size={20}
-              color="#fff"
-            />
+            <Feather name={paymentMode === "carte" ? "credit-card" : "check"} size={20} color="#fff" />
             <Text style={styles.confirmText}>
               {paymentMode === "carte"
                 ? "Payer sur le terminal SumUp"
@@ -484,6 +660,108 @@ function CartFooter({
           </>
         )}
       </Pressable>
+    </ScrollView>
+  );
+}
+
+function StickyCartBar({
+  totalItems,
+  totalFinal,
+  onPay,
+  insets,
+}: {
+  totalItems: number;
+  totalFinal: number;
+  onPay: () => void;
+  insets: { bottom: number };
+}) {
+  return (
+    <Pressable
+      style={[styles.stickyCartBar, { paddingBottom: Math.max(insets.bottom, 16) }]}
+      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onPay(); }}
+    >
+      <View style={styles.stickyCartLeft}>
+        <View style={styles.stickyCartBadge}>
+          <Text style={styles.stickyCartBadgeText}>{totalItems}</Text>
+        </View>
+        <Text style={styles.stickyCartLabel}>
+          article{totalItems !== 1 ? "s" : ""}
+        </Text>
+        {totalFinal > 0 && (
+          <Text style={styles.stickyCartTotal}>{formatPrix(totalFinal)}</Text>
+        )}
+      </View>
+      <View style={styles.stickyCartAction}>
+        <Text style={styles.stickyCartActionText}>Payer</Text>
+        <Feather name="arrow-right" size={16} color="#fff" />
+      </View>
+    </Pressable>
+  );
+}
+
+function SearchProductRow({
+  produit,
+  collection,
+  cartQty,
+  freeQty,
+  isEmpty,
+  isSelected,
+  onAdd,
+  onRemove,
+}: {
+  produit: Produit & { collectionNom: string };
+  collection: CollectionWithProduits;
+  cartQty: number;
+  freeQty: number;
+  isEmpty: boolean;
+  isSelected: boolean;
+  onAdd: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={[styles.searchProductRow, isSelected && styles.searchProductRowSelected]}>
+      <View style={[styles.colorDot, { backgroundColor: getColorHex(produit.couleur) }]} />
+      <View style={styles.flex}>
+        <Text style={[styles.searchProductName, isEmpty && { color: COLORS.textSecondary }]}>
+          {collection.nom} {produit.couleur}
+        </Text>
+        <View style={styles.productMeta}>
+          {produit.prixCentimes > 0 && (
+            <Text style={[styles.productPrice, { color: COLORS.accent }]}>{formatPrix(produit.prixCentimes)}</Text>
+          )}
+          {freeQty > 0 && (
+            <View style={styles.freeBadge}>
+              <Feather name="gift" size={11} color="#fff" />
+              <Text style={styles.freeBadgeText}>{freeQty > 1 ? `${freeQty}x ` : ""}offerte</Text>
+            </View>
+          )}
+          <Text
+            style={[
+              styles.productStock,
+              isEmpty ? { color: COLORS.danger } : produit.quantite <= 2 ? { color: "#F59E0B" } : { color: COLORS.success },
+            ]}
+          >
+            {isEmpty ? "Rupture" : `${produit.quantite} en stock`}
+          </Text>
+        </View>
+      </View>
+      <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
+        <Pressable
+          style={[styles.qtyBtn, cartQty > 0 ? { borderColor: COLORS.accent } : { borderColor: COLORS.border }]}
+          onPress={onRemove}
+          disabled={cartQty === 0 || isEmpty}
+        >
+          <Feather name="minus" size={14} color={cartQty > 0 ? COLORS.accent : COLORS.textSecondary} />
+        </Pressable>
+        <Text style={[styles.qtyValue, isSelected && { color: COLORS.accent }]}>{cartQty}</Text>
+        <Pressable
+          style={[styles.qtyBtn, cartQty < produit.quantite && !isEmpty ? { borderColor: COLORS.accent } : { borderColor: COLORS.border }]}
+          onPress={onAdd}
+          disabled={cartQty >= produit.quantite || isEmpty}
+        >
+          <Feather name="plus" size={14} color={cartQty < produit.quantite && !isEmpty ? COLORS.accent : COLORS.textSecondary} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -502,8 +780,16 @@ function getColorHex(couleur: string): string {
     gris: "#6B7280",
     beige: "#D2B48C",
     marron: "#92400E",
+    miroir: "#94A3B8",
+    transparent: "#E2E8F0",
+    ciel: "#7DD3FC",
+    nuit: "#1E3A5F",
   };
-  return map[couleur.toLowerCase()] ?? Colors.light.accent;
+  const lower = couleur.toLowerCase();
+  for (const [key, hex] of Object.entries(map)) {
+    if (lower.includes(key)) return hex;
+  }
+  return Colors.light.accent;
 }
 
 const styles = StyleSheet.create({
@@ -511,9 +797,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  sheet: {
+  flex: {
     flex: 1,
-    backgroundColor: COLORS.card,
   },
   sheetHeader: {
     flexDirection: "row",
@@ -523,6 +808,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     gap: 8,
+    backgroundColor: COLORS.card,
   },
   navBtn: {
     width: 36,
@@ -542,16 +828,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: -0.3,
   },
+
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 6,
+    margin: 16,
+    marginBottom: 8,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: COLORS.background,
+    paddingVertical: 11,
+    backgroundColor: COLORS.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -563,91 +849,131 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     padding: 0,
   },
-  listContainer: {
-    flex: 1,
+
+  listContent: {
     paddingHorizontal: 16,
+    paddingTop: 4,
   },
-  collectionSection: {
-    marginTop: 12,
-  },
-  collectionHeader: {
+
+  collectionCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.card,
-    marginBottom: 4,
+    padding: 16,
+    marginBottom: 10,
+    gap: 14,
   },
-  collectionHeaderExpanded: {
-    borderColor: COLORS.accent + "40",
-    backgroundColor: COLORS.accent + "08",
-    marginBottom: 8,
+  collectionCardDisabled: {
+    opacity: 0.45,
   },
-  collectionIconBg: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+  collectionCardIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
   },
-  collectionName: {
+  collectionCardContent: {
     flex: 1,
-    fontSize: 14,
+    gap: 4,
+  },
+  collectionCardName: {
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: COLORS.text,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
-  collectionHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  collectionSub: {
-    fontSize: 12,
+  collectionCardSub: {
+    fontSize: 13,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
   },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+  collectionCardRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  cartBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.accent,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
   },
-  badgeText: {
-    fontSize: 11,
+  cartBadgeText: {
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
     color: "#fff",
   },
-  productRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 11,
-    paddingHorizontal: 13,
-    borderRadius: 13,
+
+  productCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: COLORS.border,
+    padding: 14,
+    marginBottom: 8,
+    gap: 12,
+  },
+  productCardEmpty: {
+    opacity: 0.5,
+  },
+  productCardSelected: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accent + "07",
+  },
+  productCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  productCardInfo: {
+    flex: 1,
+    gap: 5,
+  },
+  productCardName: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+    textTransform: "capitalize",
+  },
+
+  searchProductRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     marginBottom: 7,
-    gap: 11,
+    gap: 10,
   },
-  rowDisabled: {
-    opacity: 0.4,
+  searchProductRowSelected: {
+    borderColor: COLORS.accent,
+    backgroundColor: COLORS.accent + "07",
   },
+  searchProductName: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+    textTransform: "capitalize",
+    marginBottom: 2,
+  },
+
   colorDot: {
     width: 13,
     height: 13,
     borderRadius: 7,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.1)",
-  },
-  productInfo: {
-    flex: 1,
-    gap: 4,
+    marginTop: 2,
   },
   productNameRow: {
     flexDirection: "row",
@@ -655,11 +981,19 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
   },
-  productName: {
-    fontSize: 14,
+  productMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  productPrice: {
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: COLORS.text,
-    textTransform: "capitalize",
+  },
+  productStock: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
   },
   freeBadge: {
     flexDirection: "row",
@@ -675,27 +1009,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#fff",
   },
-  productMeta: {
+
+  qtyControl: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  productPrice: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  productStock: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
-  qtyControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   qtyBtn: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     borderWidth: 1.5,
     justifyContent: "center",
@@ -703,18 +1025,237 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
   },
   qtyValue: {
-    fontSize: 16,
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+    minWidth: 22,
+    textAlign: "center",
+  },
+  qtyControlSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  qtyBtnSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: COLORS.accent + "60",
+    backgroundColor: COLORS.accent + "10",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  qtyValueSmall: {
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
     color: COLORS.text,
     minWidth: 18,
     textAlign: "center",
   },
+
   emptyText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
     textAlign: "center",
     paddingVertical: 32,
+  },
+
+  stickyCartBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 12,
+  },
+  stickyCartLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  stickyCartBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stickyCartBadgeText: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+  },
+  stickyCartLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(255,255,255,0.85)",
+  },
+  stickyCartTotal: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    letterSpacing: -0.3,
+  },
+  stickyCartAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  stickyCartActionText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+  },
+
+  paymentContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 8,
+  },
+  paymentSectionLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  cartItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 6,
+    gap: 10,
+  },
+  cartItemName: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+    textTransform: "capitalize",
+  },
+  cartItemPrice: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  totalsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+    marginTop: 6,
+    gap: 10,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+  },
+  totalValue: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+  },
+  promoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.promo + "12",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  promoRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flex: 1,
+  },
+  promoLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.promo,
+    flexShrink: 1,
+  },
+  promoDiscount: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.promo,
+  },
+  totalFinalRow: {
+    paddingTop: 10,
+    marginTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  totalFinalLabel: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+  },
+  totalFinalValue: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
+  },
+  paymentRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  payModeBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  payModeBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+  },
+  confirmBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 17,
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  confirmText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    letterSpacing: -0.3,
   },
   successContainer: {
     flex: 1,
@@ -738,147 +1279,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
-  },
-  cartFooter: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    gap: 12,
-  },
-  cartSummary: {
-    gap: 6,
-  },
-  cartSummaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cartSummaryLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.textSecondary,
-  },
-  cartSummaryValue: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.text,
-  },
-  promoBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.promo + "12",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  promoBannerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    flex: 1,
-  },
-  promoBannerTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.promo,
-    flexShrink: 1,
-  },
-  promoDiscount: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: COLORS.promo,
-  },
-  promoDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 4,
-  },
-  promoDetailText: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.promo,
-  },
-  promoDetailPrice: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: COLORS.promo + "AA",
-  },
-  cartTotalRow: {
-    paddingTop: 8,
-    marginTop: 2,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  cartTotalLabel: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: COLORS.text,
-  },
-  cartTotalValue: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.3,
-  },
-  cartInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cartItemCount: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: COLORS.textSecondary,
-  },
-  cartTotal: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.3,
-  },
-  paymentRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  payModeBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-  },
-  payModeBtnCash: {
-    backgroundColor: COLORS.cash,
-    borderColor: COLORS.cash,
-  },
-  payModeBtnCarte: {
-    backgroundColor: COLORS.card_payment,
-    borderColor: COLORS.card_payment,
-  },
-  payModeBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.text,
-  },
-  confirmBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  confirmText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    letterSpacing: -0.3,
   },
 });

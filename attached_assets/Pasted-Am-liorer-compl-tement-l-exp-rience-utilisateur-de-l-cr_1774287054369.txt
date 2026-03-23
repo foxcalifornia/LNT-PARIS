@@ -1,0 +1,168 @@
+Améliorer complètement l’expérience utilisateur de l’écran “Ajouter des produits au panier”.
+
+Problème actuel :
+- Les collections et les produits apparaissent dans la même liste.
+- Quand une collection est ouverte, les produits apparaissent au milieu de la liste, ce qui crée de la confusion.
+- L’utilisateur ne distingue pas clairement la différence entre une collection et un produit.
+- Pour une application de caisse, l’expérience doit être extrêmement rapide et intuitive.
+
+Objectif UX :
+Séparer clairement les niveaux de navigation :
+1. Choisir une collection
+2. Choisir un produit
+3. Ajouter au panier
+
+Le vendeur ne doit jamais être perdu dans une liste mixte.
+
+---
+
+1. Nouvelle structure de navigation
+
+Transformer la navigation en deux niveaux :
+
+Écran 1 : Collections  
+Écran 2 : Produits de la collection
+
+Flux utilisateur :
+
+Choisir collection  
+→ ouvrir la collection  
+→ afficher uniquement les produits de cette collection  
+→ ajouter au panier
+
+Les produits ne doivent plus apparaître directement dans la liste des collections.
+
+---
+
+2. Écran Collections
+
+Afficher uniquement les collections.
+
+Chaque carte collection doit afficher :
+
+- nom de la collection
+- nombre de produits disponibles
+- indicateur visuel clair que c’est une collection
+
+Exemple :
+
+Cancun  
+5 produits
+
+Quand on clique sur la collection :
+→ ouvrir l’écran des produits de cette collection.
+
+Design recommandé :
+
+Carte plus grande  
+icône collection  
+flèche → pour indiquer navigation
+
+---
+
+3. Écran Produits d'une collection
+
+Quand on entre dans une collection :
+
+Afficher en haut :
+
+Nom de la collection  
+Bouton retour
+
+Ensuite afficher les produits sous forme de cartes claires :
+
+Chaque produit doit afficher :
+
+- nom du produit
+- couleur
+- prix
+- stock disponible
+- bouton + pour ajouter au panier
+- compteur quantité
+
+Exemple :
+
+Cancun Bleu Miroir  
+€19,99  
+4 en stock
+
+[-] 1 [+]
+
+Si stock = 0
+→ désactiver le bouton + et afficher :
+
+“Rupture de stock”
+
+---
+
+4. Barre panier sticky
+
+Ajouter en bas de l’écran une barre sticky :
+
+Panier (3) — €58,00  
+Voir panier
+
+Cette barre doit être visible pendant la navigation produits.
+
+Objectif :
+Le vendeur sait toujours combien d’articles sont dans le panier.
+
+---
+
+5. Améliorer la lisibilité
+
+Différencier clairement :
+
+Collections :
+- cartes plus grandes
+- icône dossier / collection
+
+Produits :
+- cartes produits
+- prix visible
+- boutons + -
+
+Utiliser :
+- séparations visuelles
+- tailles de texte différentes
+- couleurs pour les stocks
+
+---
+
+6. Recherche améliorée
+
+La recherche doit fonctionner sur :
+
+- collections
+- produits
+- couleurs
+
+Quand on tape dans la recherche :
+Afficher directement les produits correspondants.
+
+---
+
+7. Performance pour caisse
+
+Optimiser pour vitesse :
+
+- ouvrir une collection instantanément
+- éviter le chargement lourd
+- scroll fluide
+- boutons + rapides
+
+L’objectif est que le vendeur puisse ajouter un produit en moins de 2 secondes.
+
+---
+
+8. Objectif final UX
+
+Nouvelle expérience :
+
+Choisir collection  
+→ voir produits  
+→ ajouter produit  
+→ voir panier  
+→ confirmer vente
+
+Plus de mélange collections / produits dans une même liste.
