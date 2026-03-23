@@ -114,16 +114,21 @@ export default function CaisseScreen() {
   }, [checkTodaySession, isAdmin]);
 
   const getLocalisation = async (): Promise<string | null> => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return null;
+    const globalTimeout = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 5000)
+    );
 
-      const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000));
-      const locationFetch = Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 0,
-        distanceInterval: 0,
-      }).then(async (loc) => {
+    const fetchLocation = async (): Promise<string | null> => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return null;
+
+        const loc = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+        if (!loc) return null;
+
         try {
           const geocode = await Location.reverseGeocodeAsync({
             latitude: loc.coords.latitude,
@@ -133,16 +138,16 @@ export default function CaisseScreen() {
             const place = geocode[0];
             return [place.street, place.city].filter(Boolean).join(", ") || null;
           }
-          return `${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`;
         } catch {
-          return `${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`;
+          /* ignorer l'erreur de geocoding */
         }
-      });
+        return `${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`;
+      } catch {
+        return null;
+      }
+    };
 
-      return await Promise.race([locationFetch, timeout]);
-    } catch {
-      return null;
-    }
+    return await Promise.race([fetchLocation(), globalTimeout]);
   };
 
   const openCaisse = async () => {
