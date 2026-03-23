@@ -50,11 +50,6 @@ export default function LoginScreen() {
     const success = login(selectedRole, password);
     if (success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (selectedRole === "vendeur") {
-        router.replace("/caisse");
-      } else {
-        router.replace("/(tabs)");
-      }
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(true);

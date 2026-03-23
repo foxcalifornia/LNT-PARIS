@@ -28,7 +28,7 @@ const queryClient = new QueryClient({
 });
 
 function RootLayoutNav() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const segments = useSegments();
 
   useEffect(() => {
@@ -36,9 +36,13 @@ function RootLayoutNav() {
     if (!isAuthenticated && !inLoginScreen) {
       router.replace("/login");
     } else if (isAuthenticated && inLoginScreen) {
-      router.replace("/(tabs)");
+      if (role === "vendeur") {
+        router.replace("/caisse");
+      } else {
+        router.replace("/(tabs)");
+      }
     }
-  }, [isAuthenticated, segments]);
+  }, [isAuthenticated, role, segments]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
