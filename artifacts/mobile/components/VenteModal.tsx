@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,12 +36,11 @@ type Props = {
 
 export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose, onPayCarte }: Props) {
   const insets = useSafeAreaInsets();
-  const [view, setView] = useState<"collections" | "produits">("collections");
-  const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
+  const [search, setSearch] = useState("");
 
   const color = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
 
@@ -90,9 +90,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
         setSuccess(false);
         setSuccessSnapshot(null);
         onCartChange([]);
-        setView("collections");
-        setSelectedCollection(null);
         setPaymentMode(defaultPaymentMode ?? null);
+        setSearch("");
         onClose();
       }, 1500);
     } catch {
@@ -101,19 +100,27 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   };
 
   const handleClose = () => {
-    setView("collections");
-    setSelectedCollection(null);
     setPaymentMode(defaultPaymentMode ?? null);
     setSuccess(false);
     setSuccessSnapshot(null);
+    setSearch("");
     onClose();
   };
 
-  const openCollection = (col: CollectionWithProduits) => {
-    Haptics.selectionAsync();
-    setSelectedCollection(col);
-    setView("produits");
-  };
+  const filteredCollections = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return collections;
+    return collections
+      .map((col) => ({
+        ...col,
+        produits: col.produits.filter(
+          (p) =>
+            p.couleur.toLowerCase().includes(q) ||
+            col.nom.toLowerCase().includes(q)
+        ),
+      }))
+      .filter((col) => col.produits.length > 0);
+  }, [collections, search]);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
@@ -121,16 +128,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
         <View style={styles.sheet}>
 
           <View style={styles.sheetHeader}>
-            {view === "produits" ? (
-              <Pressable onPress={() => setView("collections")} style={styles.navBtn}>
-                <Feather name="arrow-left" size={20} color={COLORS.text} />
-              </Pressable>
-            ) : (
-              <View style={{ width: 36 }} />
-            )}
-            <Text style={styles.sheetTitle} numberOfLines={1}>
-              {view === "collections" ? "Nouvelle Vente" : selectedCollection?.nom ?? ""}
-            </Text>
+            <View style={{ width: 36 }} />
+            <Text style={styles.sheetTitle} numberOfLines={1}>Nouvelle Vente</Text>
             <Pressable onPress={handleClose} style={styles.navBtn}>
               <Feather name="x" size={18} color={COLORS.textSecondary} />
             </Pressable>
@@ -147,19 +146,14 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
                 {successSnapshot && successSnapshot.total > 0 ? ` · ${formatPrix(successSnapshot.total)}` : ""}
               </Text>
             </View>
-          ) : view === "collections" ? (
-            <CollectionsView
-              collections={collections}
-              cart={cart}
-              color={color}
-              onOpen={openCollection}
-            />
           ) : (
-            <ProduitsView
-              collection={selectedCollection}
+            <AllProduitsView
+              collections={filteredCollections}
               cart={cart}
               color={color}
               promo={promo}
+              search={search}
+              onSearchChange={setSearch}
               getCartQty={getCartQty}
               updateCart={updateCart}
             />
@@ -183,180 +177,163 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   );
 }
 
-function CollectionsView({
+function AllProduitsView({
   collections,
   cart,
   color,
-  onOpen,
+  promo,
+  search,
+  onSearchChange,
+  getCartQty,
+  updateCart,
 }: {
   collections: CollectionWithProduits[];
   cart: CartItem[];
   color: string;
-  onOpen: (col: CollectionWithProduits) => void;
-}) {
-  return (
-    <>
-      <Text style={styles.sectionLabel}>Choisir une collection</Text>
-      <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-        {collections.map((col) => {
-          const available = col.produits.filter((p) => p.quantite > 0).length;
-          const inCart = cart
-            .filter((i) => i.produit.collectionNom === col.nom)
-            .reduce((s, i) => s + i.quantite, 0);
-          const disabled = available === 0;
-          return (
-            <Pressable
-              key={col.id}
-              style={[styles.collectionRow, disabled && styles.rowDisabled]}
-              onPress={() => onOpen(col)}
-              disabled={disabled}
-            >
-              <View style={[styles.collectionIconBg, { backgroundColor: color + "15" }]}>
-                <Feather name="layers" size={18} color={disabled ? COLORS.textSecondary : color} />
-              </View>
-              <View style={styles.collectionInfo}>
-                <Text style={[styles.collectionName, disabled && { color: COLORS.textSecondary }]}>
-                  {col.nom}
-                </Text>
-                <Text style={styles.collectionSub}>
-                  {available} modèle{available !== 1 ? "s" : ""} disponible{available !== 1 ? "s" : ""}
-                </Text>
-              </View>
-              <View style={styles.collectionRowRight}>
-                {inCart > 0 && (
-                  <View style={[styles.badge, { backgroundColor: color }]}>
-                    <Text style={styles.badgeText}>{inCart}</Text>
-                  </View>
-                )}
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={disabled ? COLORS.border : COLORS.textSecondary}
-                />
-              </View>
-            </Pressable>
-          );
-        })}
-        {collections.length === 0 && (
-          <Text style={styles.emptyText}>Aucune collection disponible</Text>
-        )}
-      </ScrollView>
-    </>
-  );
-}
-
-function ProduitsView({
-  collection,
-  cart,
-  color,
-  promo,
-  getCartQty,
-  updateCart,
-}: {
-  collection: CollectionWithProduits | null;
-  cart: CartItem[];
-  color: string;
   promo: PromoResult;
+  search: string;
+  onSearchChange: (v: string) => void;
   getCartQty: (id: number) => number;
   updateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
 }) {
-  if (!collection) return null;
-
   const freeCountByProduct = new Map<number, number>();
   for (const fd of promo.freeDetails) {
     freeCountByProduct.set(fd.produitId, fd.count);
   }
 
+  const hasAny = collections.some((c) => c.produits.length > 0);
+
   return (
     <>
-      <Text style={styles.sectionLabel}>Sélectionner les modèles</Text>
-      <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
-        {collection.produits.map((p) => {
-          const produitWithCol = { ...p, collectionNom: collection.nom };
-          const cartQty = getCartQty(p.id);
-          const freeQty = freeCountByProduct.get(p.id) ?? 0;
-          const isEmpty = p.quantite === 0;
-          const isSelected = cartQty > 0;
+      <View style={styles.searchBar}>
+        <Feather name="search" size={15} color={COLORS.textSecondary} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={onSearchChange}
+          placeholder="Rechercher une couleur ou collection…"
+          placeholderTextColor={COLORS.textSecondary}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {!hasAny && (
+          <Text style={styles.emptyText}>Aucun produit trouvé</Text>
+        )}
+        {collections.map((col) => {
+          if (col.produits.length === 0) return null;
+          const available = col.produits.filter((p) => p.quantite > 0).length;
+          const inCartCount = cart
+            .filter((i) => i.produit.collectionNom === col.nom)
+            .reduce((s, i) => s + i.quantite, 0);
+
           return (
-            <View
-              key={p.id}
-              style={[
-                styles.productRow,
-                isEmpty && styles.rowDisabled,
-                isSelected && { borderColor: color, backgroundColor: color + "07" },
-              ]}
-            >
-              <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
-              <View style={styles.productInfo}>
-                <View style={styles.productNameRow}>
-                  <Text style={[styles.productName, isEmpty && { color: COLORS.textSecondary }]}>
-                    {p.couleur}
-                  </Text>
-                  {freeQty > 0 && (
-                    <View style={styles.freeBadge}>
-                      <Feather name="gift" size={11} color="#fff" />
-                      <Text style={styles.freeBadgeText}>
-                        {freeQty > 1 ? `${freeQty}x ` : ""}offerte
-                      </Text>
+            <View key={col.id} style={styles.collectionSection}>
+              <View style={styles.collectionHeader}>
+                <View style={[styles.collectionIconBg, { backgroundColor: color + "15" }]}>
+                  <Feather name="layers" size={14} color={color} />
+                </View>
+                <Text style={styles.collectionName}>{col.nom}</Text>
+                <View style={styles.collectionHeaderRight}>
+                  {inCartCount > 0 && (
+                    <View style={[styles.badge, { backgroundColor: color }]}>
+                      <Text style={styles.badgeText}>{inCartCount}</Text>
                     </View>
                   )}
-                </View>
-                <View style={styles.productMeta}>
-                  {p.prixCentimes > 0 && (
-                    <Text style={[styles.productPrice, { color: isSelected ? color : COLORS.accent }]}>
-                      {formatPrix(p.prixCentimes)}
-                    </Text>
-                  )}
-                  <Text
-                    style={[
-                      styles.productStock,
-                      isEmpty
-                        ? { color: COLORS.danger }
-                        : p.quantite <= 2
-                        ? { color: "#F59E0B" }
-                        : { color: COLORS.success },
-                    ]}
-                  >
-                    {p.quantite} en stock
+                  <Text style={styles.collectionSub}>
+                    {available}/{col.produits.length}
                   </Text>
                 </View>
               </View>
-              <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
-                <Pressable
-                  style={[styles.qtyBtn, { borderColor: cartQty > 0 ? color : COLORS.border }]}
-                  onPress={() => updateCart(produitWithCol, -1)}
-                  disabled={cartQty === 0 || isEmpty}
-                >
-                  <Feather
-                    name="minus"
-                    size={15}
-                    color={cartQty > 0 ? color : COLORS.textSecondary}
-                  />
-                </Pressable>
-                <Text style={[styles.qtyValue, isSelected && { color }]}>{cartQty}</Text>
-                <Pressable
-                  style={[
-                    styles.qtyBtn,
-                    { borderColor: cartQty < p.quantite && !isEmpty ? color : COLORS.border },
-                  ]}
-                  onPress={() => updateCart(produitWithCol, +1)}
-                  disabled={cartQty >= p.quantite || isEmpty}
-                >
-                  <Feather
-                    name="plus"
-                    size={15}
-                    color={
-                      cartQty < p.quantite && !isEmpty ? color : COLORS.textSecondary
-                    }
-                  />
-                </Pressable>
-              </View>
+
+              {col.produits.map((p) => {
+                const produitWithCol = { ...p, collectionNom: col.nom };
+                const cartQty = getCartQty(p.id);
+                const freeQty = freeCountByProduct.get(p.id) ?? 0;
+                const isEmpty = p.quantite === 0;
+                const isSelected = cartQty > 0;
+                return (
+                  <View
+                    key={p.id}
+                    style={[
+                      styles.productRow,
+                      isEmpty && styles.rowDisabled,
+                      isSelected && { borderColor: color, backgroundColor: color + "07" },
+                    ]}
+                  >
+                    <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
+                    <View style={styles.productInfo}>
+                      <View style={styles.productNameRow}>
+                        <Text style={[styles.productName, isEmpty && { color: COLORS.textSecondary }]}>
+                          {p.couleur}
+                        </Text>
+                        {freeQty > 0 && (
+                          <View style={styles.freeBadge}>
+                            <Feather name="gift" size={11} color="#fff" />
+                            <Text style={styles.freeBadgeText}>
+                              {freeQty > 1 ? `${freeQty}x ` : ""}offerte
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.productMeta}>
+                        {p.prixCentimes > 0 && (
+                          <Text style={[styles.productPrice, { color: isSelected ? color : COLORS.accent }]}>
+                            {formatPrix(p.prixCentimes)}
+                          </Text>
+                        )}
+                        <Text
+                          style={[
+                            styles.productStock,
+                            isEmpty
+                              ? { color: COLORS.danger }
+                              : p.quantite <= 2
+                              ? { color: "#F59E0B" }
+                              : { color: COLORS.success },
+                          ]}
+                        >
+                          {p.quantite} en stock
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
+                      <Pressable
+                        style={[styles.qtyBtn, { borderColor: cartQty > 0 ? color : COLORS.border }]}
+                        onPress={() => updateCart(produitWithCol, -1)}
+                        disabled={cartQty === 0 || isEmpty}
+                      >
+                        <Feather
+                          name="minus"
+                          size={15}
+                          color={cartQty > 0 ? color : COLORS.textSecondary}
+                        />
+                      </Pressable>
+                      <Text style={[styles.qtyValue, isSelected && { color }]}>{cartQty}</Text>
+                      <Pressable
+                        style={[
+                          styles.qtyBtn,
+                          { borderColor: cartQty < p.quantite && !isEmpty ? color : COLORS.border },
+                        ]}
+                        onPress={() => updateCart(produitWithCol, +1)}
+                        disabled={cartQty >= p.quantite || isEmpty}
+                      >
+                        <Feather
+                          name="plus"
+                          size={15}
+                          color={
+                            cartQty < p.quantite && !isEmpty ? color : COLORS.textSecondary
+                          }
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           );
         })}
-        {collection.produits.length === 0 && (
-          <Text style={styles.emptyText}>Aucun produit dans cette collection</Text>
-        )}
         <View style={{ height: 16 }} />
       </ScrollView>
     </>
@@ -509,10 +486,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.card,
   },
-  handle: {
-    width: 0,
-    height: 0,
-  },
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -540,88 +513,95 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: -0.3,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 1.5,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 10,
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.text,
+    padding: 0,
   },
   listContainer: {
     flex: 1,
     paddingHorizontal: 16,
   },
-  collectionRow: {
+  collectionSection: {
+    marginTop: 12,
+  },
+  collectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    marginBottom: 10,
-    backgroundColor: COLORS.card,
-    gap: 14,
-  },
-  rowDisabled: {
-    opacity: 0.4,
+    gap: 10,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   collectionIconBg: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
-  collectionInfo: {
-    flex: 1,
-    gap: 3,
-  },
   collectionName: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 14,
     fontFamily: "Inter_700Bold",
     color: COLORS.text,
     letterSpacing: -0.2,
+  },
+  collectionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   collectionSub: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
   },
-  collectionRowRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
     color: "#fff",
   },
   productRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+    borderRadius: 13,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    marginBottom: 8,
-    gap: 12,
+    marginBottom: 7,
+    gap: 11,
+  },
+  rowDisabled: {
+    opacity: 0.4,
   },
   colorDot: {
-    width: 14,
-    height: 14,
+    width: 13,
+    height: 13,
     borderRadius: 7,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.1)",
@@ -637,7 +617,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   productName: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: COLORS.text,
     textTransform: "capitalize",
@@ -662,17 +642,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   productPrice: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   productStock: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_400Regular",
   },
   qtyControl: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   qtyBtn: {
     width: 32,
@@ -687,7 +667,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: COLORS.text,
-    minWidth: 20,
+    minWidth: 18,
     textAlign: "center",
   },
   emptyText: {
@@ -695,11 +675,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
     textAlign: "center",
-    paddingVertical: 24,
+    paddingVertical: 32,
   },
   successContainer: {
+    flex: 1,
     alignItems: "center",
-    paddingVertical: 48,
+    justifyContent: "center",
     gap: 12,
   },
   successIcon: {
