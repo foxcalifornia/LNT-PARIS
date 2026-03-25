@@ -103,6 +103,13 @@ export type Consommable = {
   createdAt: string;
 };
 
+export type Boite = {
+  id: number;
+  nom: string;
+  quantite: number;
+  createdAt: string;
+};
+
 export type MouvementStock = {
   id: number;
   typeMouvement: "vente" | "reappro" | "annulation";
@@ -190,6 +197,19 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       }),
+    getBoites: () => request<Boite[]>("/boites"),
+    createBoite: (nom: string) =>
+      request<Boite>("/boites", {
+        method: "POST",
+        body: JSON.stringify({ nom }),
+      }),
+    updateBoite: (id: number, data: { quantite?: number; nom?: string }) =>
+      request<Boite>(`/boites/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    deleteBoite: (id: number) =>
+      request<{ message: string }>(`/boites/${id}`, { method: "DELETE" }),
     getMouvements: () => request<MouvementStock[]>("/mouvements"),
   },
   reporting: {

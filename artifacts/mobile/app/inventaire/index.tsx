@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { api, formatPrix, type CollectionWithProduits, type Produit, type Consommable, type MouvementStock } from "@/lib/api";
+import { api, formatPrix, type CollectionWithProduits, type Produit, type Consommable, type MouvementStock, type Boite } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
@@ -51,6 +51,11 @@ export default function InventaireScreen() {
   const { data: consommables = [], refetch: refetchConsommables } = useQuery({
     queryKey: ["consommables"],
     queryFn: api.inventory.getConsommables,
+  });
+
+  const { data: boites = [], refetch: refetchBoites } = useQuery({
+    queryKey: ["boites"],
+    queryFn: api.inventory.getBoites,
   });
 
   const { data: mouvements = [], isLoading: mouvementsLoading, refetch: refetchMouvements } = useQuery({
@@ -215,6 +220,14 @@ export default function InventaireScreen() {
             onUpdated={() => {
               queryClient.invalidateQueries({ queryKey: ["consommables"] });
               refetchConsommables();
+            }}
+          />
+
+          <BoitesSection
+            boites={boites}
+            onUpdated={() => {
+              queryClient.invalidateQueries({ queryKey: ["boites"] });
+              refetchBoites();
             }}
           />
         </ScrollView>
@@ -1147,6 +1160,205 @@ function ConsommablesSection({ consommables, onUpdated }: {
   );
 }
 
+function BoitesSection({ boites, onUpdated }: {
+  boites: Boite[];
+  onUpdated: () => void;
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newNom, setNewNom] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editNom, setEditNom] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: (nom: string) => api.inventory.createBoite(nom),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setNewNom("");
+      setShowAdd(false);
+      onUpdated();
+    },
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { quantite?: number; nom?: string } }) =>
+      api.inventory.updateBoite(id, data),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEditingId(null);
+      onUpdated();
+    },
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.inventory.deleteBoite(id),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onUpdated();
+    },
+  });
+
+  const handleDelete = (b: Boite) => {
+    Alert.alert(
+      `Supprimer "${b.nom}" ?`,
+      "Cette boîte sera supprimée définitivement.",
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Supprimer", style: "destructive", onPress: () => deleteMutation.mutate(b.id) },
+      ]
+    );
+  };
+
+  const adjust = (b: Boite, delta: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    updateMutation.mutate({ id: b.id, data: { quantite: Math.max(0, b.quantite + delta) } });
+  };
+
+  const startEditNom = (b: Boite) => {
+    setEditingId(b.id);
+    setEditNom(b.nom);
+  };
+
+  const saveNom = (id: number) => {
+    if (!editNom.trim()) return;
+    updateMutation.mutate({ id, data: { nom: editNom.trim() } });
+  };
+
+  const handleCreate = () => {
+    if (!newNom.trim()) { Alert.alert("Erreur", "Nom requis"); return; }
+    createMutation.mutate(newNom.trim());
+  };
+
+  return (
+    <View style={[styles.consommablesSection, { marginTop: 16 }]}>
+      <View style={styles.consommablesSectionHeader}>
+        <View style={[styles.consommablesSectionIcon, { backgroundColor: "#EDE9FE", borderColor: "#C4B5FD" }]}>
+          <Feather name="box" size={16} color="#7C3AED" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.consommablesSectionTitle}>Boîtes</Text>
+          <Text style={styles.consommablesSectionSub}>Stock manuel — sans déduction automatique</Text>
+        </View>
+      </View>
+
+      {boites.length === 0 && !showAdd && (
+        <View style={{ paddingVertical: 16, paddingHorizontal: 16, alignItems: "center" }}>
+          <Text style={styles.emptyProduitsText}>Aucun type de boîte — ajoutez-en un</Text>
+        </View>
+      )}
+
+      {boites.map((b) => {
+        const isEditing = editingId === b.id;
+        return (
+          <View
+            key={b.id}
+            style={[styles.consommableRow, isEditing && { paddingVertical: 12, flexDirection: "column", alignItems: "stretch" }]}
+          >
+            {isEditing ? (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.consommableFieldLabel}>Modifier le nom</Text>
+                <TextInput
+                  style={[styles.consommableInput, { textAlign: "left", paddingHorizontal: 12, fontSize: 15 }]}
+                  value={editNom}
+                  onChangeText={setEditNom}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => saveNom(b.id)}
+                />
+                <View style={styles.consommableEditBtns}>
+                  <Pressable style={styles.consommableCancelBtn} onPress={() => setEditingId(null)}>
+                    <Text style={styles.consommableCancelText}>Annuler</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.consommableSaveBtn, { backgroundColor: "#7C3AED" }, updateMutation.isPending && { opacity: 0.5 }]}
+                    onPress={() => saveNom(b.id)}
+                    disabled={updateMutation.isPending}
+                  >
+                    {updateMutation.isPending
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.consommableSaveText}>Enregistrer</Text>
+                    }
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <Pressable style={{ flex: 1 }} onPress={() => startEditNom(b)}>
+                  <Text style={styles.consommableNom}>{b.nom}</Text>
+                </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Pressable
+                    style={[styles.boiteAdjustBtn, b.quantite === 0 && styles.btnDisabled]}
+                    onPress={() => adjust(b, -1)}
+                    disabled={b.quantite === 0 || updateMutation.isPending}
+                  >
+                    <Feather name="minus" size={14} color={b.quantite === 0 ? COLORS.textSecondary : "#7C3AED"} />
+                  </Pressable>
+                  <Text style={[styles.consommableQty, { color: b.quantite === 0 ? COLORS.danger : "#7C3AED", minWidth: 32, textAlign: "center" }]}>
+                    {b.quantite}
+                  </Text>
+                  <Pressable
+                    style={styles.boiteAdjustBtn}
+                    onPress={() => adjust(b, 1)}
+                    disabled={updateMutation.isPending}
+                  >
+                    <Feather name="plus" size={14} color="#7C3AED" />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.deleteProduitBtn, { marginLeft: 4 }]}
+                    onPress={() => handleDelete(b)}
+                  >
+                    <Feather name="trash-2" size={13} color={COLORS.danger} />
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        );
+      })}
+
+      {showAdd ? (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 10, borderTopWidth: 1, borderTopColor: COLORS.border }}>
+          <TextInput
+            style={[styles.consommableInput, { textAlign: "left", paddingHorizontal: 12, fontSize: 15, width: "100%" }]}
+            value={newNom}
+            onChangeText={setNewNom}
+            placeholder="Nom du type de boîte (ex: Grand, Petit...)"
+            placeholderTextColor={COLORS.textSecondary}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleCreate}
+          />
+          <View style={styles.consommableEditBtns}>
+            <Pressable style={styles.consommableCancelBtn} onPress={() => { setShowAdd(false); setNewNom(""); }}>
+              <Text style={styles.consommableCancelText}>Annuler</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.consommableSaveBtn, { backgroundColor: "#7C3AED" }, createMutation.isPending && { opacity: 0.5 }]}
+              onPress={handleCreate}
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.consommableSaveText}>Créer</Text>
+              }
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          style={styles.addProduitBtn}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowAdd(true); }}
+        >
+          <Feather name="plus" size={16} color="#7C3AED" />
+          <Text style={[styles.addProduitText, { color: "#7C3AED" }]}>Ajouter un type de boîte</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function AddCollectionModal({ visible, onClose, onSuccess }: {
   visible: boolean;
   onClose: () => void;
@@ -2003,5 +2215,11 @@ const styles = StyleSheet.create({
   },
   sheetActionBtnText: {
     fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  boiteAdjustBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: "#EDE9FE",
+    borderWidth: 1, borderColor: "#C4B5FD",
+    justifyContent: "center", alignItems: "center",
   },
 });

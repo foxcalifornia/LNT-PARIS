@@ -8,6 +8,7 @@ import {
   insertCollectionSchema,
   insertProduitSchema,
   insertVenteSchema,
+  boitesTable,
 } from "@workspace/db/schema";
 import { eq, desc, gte } from "drizzle-orm";
 import { decrementerConsommables } from "../lib/consommables";
@@ -476,6 +477,58 @@ router.get("/reporting/daily", async (req, res) => {
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Erreur reporting" });
+  }
+});
+
+router.get("/boites", async (req, res) => {
+  try {
+    const boites = await db.select().from(boitesTable).orderBy(boitesTable.createdAt);
+    res.json(boites);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la récupération des boîtes" });
+  }
+});
+
+router.post("/boites", async (req, res) => {
+  try {
+    const { nom } = req.body as { nom: string };
+    if (!nom || !nom.trim()) {
+      res.status(400).json({ error: "Nom requis" });
+      return;
+    }
+    const [boite] = await db.insert(boitesTable).values({ nom: nom.trim() }).returning();
+    res.status(201).json(boite);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la création" });
+  }
+});
+
+router.put("/boites/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { quantite, nom } = req.body as { quantite?: number; nom?: string };
+    const data: { quantite?: number; nom?: string } = {};
+    if (quantite !== undefined) data.quantite = Math.max(0, quantite);
+    if (nom !== undefined) data.nom = nom.trim();
+    const [updated] = await db.update(boitesTable).set(data).where(eq(boitesTable.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: "Boîte non trouvée" }); return; }
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la mise à jour" });
+  }
+});
+
+router.delete("/boites/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(boitesTable).where(eq(boitesTable.id, id));
+    res.json({ message: "Boîte supprimée" });
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la suppression" });
   }
 });
 
