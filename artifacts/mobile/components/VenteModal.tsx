@@ -45,6 +45,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
   const [search, setSearch] = useState("");
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactInfo, setContactInfo] = useState("");
 
   const totalItems = cart.reduce((sum, i) => sum + i.quantite, 0);
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
@@ -78,7 +80,14 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     setSuccess(false);
     setSuccessSnapshot(null);
     setSearch("");
+    setContactInfo("");
+    setShowContactModal(false);
     onClose();
+  };
+
+  const handleGoToPaiement = () => {
+    if (cart.length === 0) return;
+    setShowContactModal(true);
   };
 
   const openCollection = (col: CollectionWithProduits) => {
@@ -203,6 +212,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
             onConfirm={handleConfirm}
             onUpdateCart={updateCart}
             getCartQty={getCartQty}
+            contactInfo={contactInfo}
             insets={insets}
           />
 
@@ -215,7 +225,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
             totalFinal={totalFinal}
             getCartQty={getCartQty}
             updateCart={updateCart}
-            onPay={() => setView("paiement")}
+            onPay={handleGoToPaiement}
             insets={insets}
           />
 
@@ -229,7 +239,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
             onSearchChange={setSearch}
             searchResults={searchResults}
             onOpen={openCollection}
-            onPay={() => setView("paiement")}
+            onPay={handleGoToPaiement}
             getCartQty={getCartQty}
             updateCart={updateCart}
             promo={promo}
@@ -237,6 +247,83 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
           />
         )}
       </View>
+      <ContactInfoModal
+        visible={showContactModal}
+        onSkip={() => {
+          setContactInfo("");
+          setShowContactModal(false);
+          setView("paiement");
+        }}
+        onConfirm={(info) => {
+          setContactInfo(info.trim());
+          setShowContactModal(false);
+          setView("paiement");
+        }}
+      />
+    </Modal>
+  );
+}
+
+function ContactInfoModal({
+  visible,
+  onSkip,
+  onConfirm,
+}: {
+  visible: boolean;
+  onSkip: () => void;
+  onConfirm: (info: string) => void;
+}) {
+  const [value, setValue] = useState("");
+
+  const handleSkip = () => {
+    setValue("");
+    onSkip();
+  };
+
+  const handleConfirm = () => {
+    onConfirm(value);
+    setValue("");
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip}>
+      <Pressable style={styles.contactOverlay} onPress={handleSkip}>
+        <Pressable style={styles.contactCard} onPress={() => {}}>
+          <View style={styles.contactHeader}>
+            <View style={styles.contactIconWrap}>
+              <Feather name="user" size={22} color={COLORS.accent} />
+            </View>
+            <Text style={styles.contactTitle}>Coordonnées client</Text>
+            <Text style={styles.contactSubtitle}>Facultatif — le client peut refuser</Text>
+          </View>
+
+          <TextInput
+            style={styles.contactInput}
+            placeholder="Téléphone ou adresse e-mail"
+            placeholderTextColor={COLORS.textMuted}
+            value={value}
+            onChangeText={setValue}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleConfirm}
+          />
+
+          <View style={styles.contactActions}>
+            <Pressable style={styles.contactSkipBtn} onPress={handleSkip}>
+              <Text style={styles.contactSkipText}>Passer</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.contactConfirmBtn, !value.trim() && { opacity: 0.45 }]}
+              onPress={handleConfirm}
+            >
+              <Feather name="arrow-right" size={16} color="#fff" />
+              <Text style={styles.contactConfirmText}>Continuer</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -537,6 +624,7 @@ function PaymentView({
   onConfirm,
   onUpdateCart,
   getCartQty,
+  contactInfo,
   insets,
 }: {
   totalItems: number;
@@ -550,6 +638,7 @@ function PaymentView({
   onConfirm: () => void;
   onUpdateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
   getCartQty: (id: number) => number;
+  contactInfo: string;
   insets: { bottom: number };
 }) {
   const hasPromo = promo.nbFree > 0;
@@ -619,6 +708,14 @@ function PaymentView({
           </View>
         )}
       </View>
+
+      {/* Contact info */}
+      {contactInfo ? (
+        <View style={styles.contactBadge}>
+          <Feather name="user" size={14} color={COLORS.accent} />
+          <Text style={styles.contactBadgeText} numberOfLines={1}>{contactInfo}</Text>
+        </View>
+      ) : null}
 
       {/* Payment mode */}
       <Text style={styles.paymentSectionLabel}>Mode de paiement</Text>
@@ -1279,5 +1376,110 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
+  },
+  contactOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  contactCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 24,
+    width: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  contactHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+    gap: 6,
+  },
+  contactIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.accentLight,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  contactTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+    letterSpacing: -0.4,
+  },
+  contactSubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    textAlign: "center",
+  },
+  contactInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.text,
+    marginBottom: 16,
+  },
+  contactActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  contactSkipBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contactSkipText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+  },
+  contactConfirmBtn: {
+    flex: 2,
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contactConfirmText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
+  },
+  contactBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: COLORS.accentLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 16,
+  },
+  contactBadgeText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.accent,
+    flex: 1,
   },
 });
