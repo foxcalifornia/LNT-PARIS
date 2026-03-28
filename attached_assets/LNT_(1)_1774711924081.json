@@ -1,0 +1,13 @@
+{
+  "application_type": "ios",
+  "client_id": "cc_classic_3lcDQHRMJH1MKUls4LnbE8hkDvQNb",
+  "client_secret": "cc_sk_classic_MhuszDMDgZXvA9Y4OcDF4bcV7UDABRXykDBXkxBealtEHkp00g",
+  "cors_uris": [
+    ""
+  ],
+  "id": "CCCYTVEHP",
+  "name": "LNT",
+  "redirect_uris": [
+    "https://lntparis.replit.app/callback"
+  ]
+}

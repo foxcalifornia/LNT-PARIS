@@ -28,8 +28,8 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-SUMUP_CLIENT_ID = "cc_classic_wnQZgbUvcxdepmC4GXIzE4suqNlh0"
-SUMUP_CLIENT_SECRET = "cc_sk_classic_SHVXmz1Ck2hbSGX3U8I2kvbDRlJDsVBE8YCQH8fn01JPF5ny9u"
+SUMUP_CLIENT_ID = "cc_classic_3lcDQHRMJH1MKUls4LnbE8hkDvQNb"
+SUMUP_CLIENT_SECRET = "cc_sk_classic_MhuszDMDgZXvA9Y4OcDF4bcV7UDABRXykDBXkxBealtEHkp00g"
 SUMUP_READER_ID = "200101010081"
 
 [nix]
