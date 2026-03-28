@@ -192,56 +192,6 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     setTerminalError(null);
   };
 
-  const handleManualConfirm = () => {
-    if (!saleReference) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Confirmer le paiement",
-      `Confirmez-vous avoir vu "Accepté" sur l'écran du terminal SumUp ?\n\nCette action enregistre la vente (${formatPrix(totalFinal)}) et déduit le stock. Elle est irréversible.`,
-      [
-        { text: "Non, annuler", style: "cancel" },
-        {
-          text: "Oui, paiement confirmé",
-          style: "default",
-          onPress: () => doManualConfirm(),
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const doManualConfirm = async () => {
-    if (!saleReference) return;
-    stopPolling();
-    setTerminalState("creating");
-    try {
-      await api.payments.confirm({
-        saleReference,
-        items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
-        forceConfirm: true,
-      });
-      await onRefreshAfterVente();
-      setTerminalState("paid");
-      setSuccessMode("carte");
-      setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal });
-      setSuccess(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => {
-        setSuccess(false);
-        setSuccessMode(null);
-        setSuccessSnapshot(null);
-        setTerminalState("idle");
-        setSaleReference(null);
-        onCartChange([]);
-        onClose();
-      }, 2000);
-    } catch (err) {
-      setTerminalState("failed");
-      setTerminalError((err as Error).message ?? "Erreur lors de la confirmation");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  };
-
   const handleRetryOrBack = () => {
     setTerminalState("idle");
     setSaleReference(null);
@@ -326,10 +276,6 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
-          <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
-            <Feather name="check-circle" size={16} color="#fff" />
-            <Text style={styles.terminalConfirmText}>✓ Paiement reçu sur le terminal</Text>
-          </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
             <Text style={styles.terminalCancelText}>Annuler le paiement</Text>
