@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -327,6 +328,22 @@ function SectionPaiements({
   const [cardEnabled, setCardEnabled] = useState(settings.card_payment_enabled === "true");
   const sumupClientId = process.env.EXPO_PUBLIC_SUMUP_CLIENT_ID;
 
+  const handleReauth = () => {
+    Alert.alert(
+      "Réautorisation SumUp",
+      "Vous allez être redirigé vers SumUp pour accorder les permissions nécessaires (dont l'historique des transactions). Continuer ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Continuer",
+          onPress: () => {
+            Linking.openURL("https://lntparis.replit.app/auth/sumup");
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <SectionCard
       icon="credit-card"
@@ -343,6 +360,17 @@ function SectionPaiements({
         value="200101010081"
         valueColor={COLORS.textSecondary}
       />
+      <View style={styles.divider} />
+      <Pressable
+        style={({ pressed }) => [
+          styles.reauthBtn,
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={handleReauth}
+      >
+        <Feather name="refresh-cw" size={14} color={COLORS.accent} style={{ marginRight: 6 }} />
+        <Text style={styles.reauthBtnText}>Réautoriser SumUp (transactions.history)</Text>
+      </Pressable>
       <View style={styles.divider} />
       <View style={styles.switchRow}>
         <View style={styles.flex}>
@@ -732,5 +760,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_700Bold",
     color: "#fff",
+  },
+  reauthBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.accent + "18",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.accent + "40",
+  },
+  reauthBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.accent,
   },
 });

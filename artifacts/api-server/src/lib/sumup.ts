@@ -1,4 +1,32 @@
+import { db } from "@workspace/db";
+import { settingsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+
 const SUMUP_BASE = "https://api.sumup.com";
+
+// ── DB-backed token persistence ─────────────────────────────────────────────
+async function getDbToken(key: string): Promise<string | null> {
+  try {
+    const rows = await db.select().from(settingsTable).where(eq(settingsTable.key, key));
+    return rows[0]?.value ?? null;
+  } catch { return null; }
+}
+
+async function setDbToken(key: string, value: string): Promise<void> {
+  try {
+    await db
+      .insert(settingsTable)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: settingsTable.key, set: { value, updatedAt: new Date() } });
+  } catch { /* best effort */ }
+}
+
+export async function persistSumUpTokens(userToken: string, refreshToken: string): Promise<void> {
+  await setDbToken("sumup_user_token", userToken);
+  await setDbToken("sumup_refresh_token", refreshToken);
+  process.env["SUMUP_USER_TOKEN"] = userToken;
+  process.env["SUMUP_REFRESH_TOKEN"] = refreshToken;
+}
 
 type TokenCache = {
   access_token: string;
@@ -91,33 +119,42 @@ export async function createSumUpCheckout(opts: {
   return res.json() as Promise<{ id: string; checkout_reference: string; status: string }>;
 }
 
+async function refreshUserToken(refreshTok: string): Promise<{ access_token: string; refresh_token?: string } | null> {
+  const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
+  const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
+  const res = await fetch(`${SUMUP_BASE}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshTok,
+    }),
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<{ access_token: string; refresh_token?: string }>;
+}
+
 async function getUserToken(): Promise<string> {
-  // Try user token first (obtained via OAuth authorization_code flow)
+  // 1. Try in-memory env var (fastest path)
   const userToken = process.env["SUMUP_USER_TOKEN"];
   if (userToken) return userToken;
 
-  // Try refresh token to get a new user token
-  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"];
+  // 2. Load from DB (survives restarts, shared between dev/prod)
+  const dbToken = await getDbToken("sumup_user_token");
+  if (dbToken) {
+    process.env["SUMUP_USER_TOKEN"] = dbToken;
+    return dbToken;
+  }
+
+  // 3. Try refresh token (env var first, then DB)
+  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"] || await getDbToken("sumup_refresh_token");
   if (refreshToken) {
-    const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
-    const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
-    const res = await fetch(`${SUMUP_BASE}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json() as { access_token?: string; refresh_token?: string };
-      if (data.access_token) {
-        process.env["SUMUP_USER_TOKEN"] = data.access_token;
-        if (data.refresh_token) process.env["SUMUP_REFRESH_TOKEN"] = data.refresh_token;
-        return data.access_token;
-      }
+    const data = await refreshUserToken(refreshToken);
+    if (data?.access_token) {
+      await persistSumUpTokens(data.access_token, data.refresh_token ?? refreshToken);
+      return data.access_token;
     }
   }
 
@@ -186,28 +223,34 @@ export async function getTransactionByClientId(
   currency?: string;
   raw?: unknown;
 } | null> {
-  let token: string;
-  try {
-    token = await getUserToken();
-  } catch {
-    return null;
-  }
+  // Collect tokens to try in order: client_credentials first, then user token
+  const tokensToTry: string[] = [];
+  try { tokensToTry.push(await getSumUpToken()); } catch { /* ignore */ }
+  try { tokensToTry.push(await getUserToken()); } catch { /* ignore */ }
 
-  // Fetch last 20 transactions, newest first
-  const res = await fetch(
-    `${SUMUP_BASE}/v0.1/me/transactions/history?limit=20&order=created_at.desc`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  if (tokensToTry.length === 0) return null;
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      process.env["SUMUP_USER_TOKEN"] = "";
+  let items: SumUpTransaction[] = [];
+  let lastError: string | null = null;
+
+  for (const tok of tokensToTry) {
+    const res = await fetch(
+      `${SUMUP_BASE}/v0.1/me/transactions/history?limit=20&order=created_at.desc`,
+      { headers: { Authorization: `Bearer ${tok}` } },
+    );
+    if (res.ok) {
+      const data = await res.json() as { items?: SumUpTransaction[] };
+      items = data.items ?? [];
+      lastError = null;
+      break;
     }
-    throw new Error(`SumUp transactions history error ${res.status}: ${await res.text()}`);
+    if (res.status === 401) process.env["SUMUP_USER_TOKEN"] = "";
+    lastError = `SumUp transactions history error ${res.status}: ${await res.text()}`;
   }
 
-  const data = await res.json() as { items?: SumUpTransaction[] };
-  const items = data.items ?? [];
+  if (lastError !== null) {
+    throw new Error(lastError);
+  }
 
   // ── Strategy 1: exact client_transaction_id match ──
   const byId = items.find(

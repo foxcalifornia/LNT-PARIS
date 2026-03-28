@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { persistSumUpTokens } from "./lib/sumup";
 
 const app: Express = express();
 
@@ -30,6 +31,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// ── Initiate SumUp OAuth with full scopes (including transactions.history) ──
+app.get("/auth/sumup", (req: Request, res: Response) => {
+  const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
+  const REDIRECT_URI = "https://lntparis.replit.app/callback";
+  const scope = "payments transactions.history readers.read readers.write";
+
+  const url = new URL("https://auth.sumup.com/authorize");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("redirect_uri", REDIRECT_URI);
+  url.searchParams.set("scope", scope);
+
+  res.redirect(url.toString());
+});
 
 app.get("/callback", async (req: Request, res: Response) => {
   const { code, error, error_description } = req.query as Record<string, string>;
@@ -84,11 +100,10 @@ app.get("/callback", async (req: Request, res: Response) => {
     const userToken = tokenData["access_token"] as string;
     const refreshToken = (tokenData["refresh_token"] as string) ?? "";
 
-    // Store the refresh token and access token in memory for use by the reader endpoints
-    process.env["SUMUP_USER_TOKEN"] = userToken;
-    process.env["SUMUP_REFRESH_TOKEN"] = refreshToken;
+    // Store tokens in env vars AND in the database so they survive restarts
+    await persistSumUpTokens(userToken, refreshToken);
 
-    logger.info({ refreshToken: refreshToken.slice(0, 20) + "..." }, "SumUp OAuth tokens stored in memory");
+    logger.info({ refreshToken: refreshToken.slice(0, 20) + "..." }, "SumUp OAuth tokens persisted to DB and memory");
 
     // List readers using merchant-specific endpoint
     const readersRes = await fetch(`https://api.sumup.com/v0.1/merchants/${MERCHANT_CODE}/readers`, {
