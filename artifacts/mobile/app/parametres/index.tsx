@@ -337,7 +337,7 @@ function SectionPaiements({
         { text: "Annuler", style: "cancel" },
         {
           text: "Continuer",
-          onPress: () => Linking.openURL("https://lntparis.replit.app/sumup-connect"),
+          onPress: () => Linking.openURL("https://lntparis.replit.app/api/sumup-connect"),
         },
       ]
     );

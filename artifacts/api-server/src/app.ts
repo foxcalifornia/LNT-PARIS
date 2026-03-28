@@ -34,15 +34,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
 
 // SumUp OAuth authorization URL
-app.get("/sumup-connect", (_req: Request, res: Response) => {
+app.get("/api/sumup-connect", (_req: Request, res: Response) => {
   const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
-  const REDIRECT_URI = "https://lntparis.replit.app/callback";
+  const REDIRECT_URI = "https://lntparis.replit.app/api/callback";
   const SCOPES = "payments readers.read readers.write transactions.history";
   const url = `https://api.sumup.com/authorize?response_type=code&client_id=${encodeURIComponent(CLIENT_ID)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}`;
   return res.redirect(url);
 });
 
-app.get("/callback", async (req: Request, res: Response) => {
+app.get("/api/callback", async (req: Request, res: Response) => {
   const { code, error, error_description } = req.query as Record<string, string>;
 
   if (error) {
@@ -66,7 +66,7 @@ app.get("/callback", async (req: Request, res: Response) => {
   try {
     const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
     const CLIENT_SECRET = process.env["SUMUP_CLIENT_SECRET"] ?? "";
-    const REDIRECT_URI = "https://lntparis.replit.app/callback";
+    const REDIRECT_URI = "https://lntparis.replit.app/api/callback";
 
     const tokenRes = await fetch("https://api.sumup.com/token", {
       method: "POST",
