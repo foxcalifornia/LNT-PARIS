@@ -41,6 +41,10 @@ router.post("/create", async (req, res) => {
       res.status(400).json({ error: "Montant invalide" });
       return;
     }
+    if (montantCentimes < 100) {
+      res.status(400).json({ error: "Montant minimum : 1,00 € pour un paiement par terminal SumUp" });
+      return;
+    }
     if (!items || items.length === 0) {
       res.status(400).json({ error: "Panier vide" });
       return;
@@ -66,6 +70,7 @@ router.post("/create", async (req, res) => {
       sumupCheckoutId: checkout.id,
       montantCentimes,
       statut: "PENDING",
+      itemsJson: JSON.stringify(items),
     });
 
     const readerId = process.env["SUMUP_READER_ID"];
@@ -151,14 +156,14 @@ router.get("/status/:saleReference", async (req, res) => {
 
 router.post("/confirm", async (req, res) => {
   try {
-    const { saleReference, items, forceConfirm } = req.body as {
+    const { saleReference, items: bodyItems, forceConfirm } = req.body as {
       saleReference: string;
-      items: { produitId: number; quantite: number }[];
+      items?: { produitId: number; quantite: number }[];
       forceConfirm?: boolean;
     };
 
-    if (!saleReference || !items || items.length === 0) {
-      res.status(400).json({ error: "Données manquantes" });
+    if (!saleReference) {
+      res.status(400).json({ error: "Référence de vente manquante" });
       return;
     }
 
@@ -200,6 +205,14 @@ router.post("/confirm", async (req, res) => {
           .where(eq(sumupCheckoutsTable.saleReference, saleReference));
       }
     }
+
+    // Use items from body, or fall back to stored items in DB
+    const items: { produitId: number; quantite: number }[] =
+      bodyItems && bodyItems.length > 0
+        ? bodyItems
+        : record.itemsJson
+          ? (JSON.parse(record.itemsJson) as { produitId: number; quantite: number }[])
+          : [];
 
     let totalArticles = 0;
 

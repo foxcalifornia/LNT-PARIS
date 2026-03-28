@@ -10,6 +10,7 @@ export const sumupCheckoutsTable = pgTable("sumup_checkouts", {
   rawResponse: text("raw_response"),
   paidAt: timestamp("paid_at"),
   confirmedLocally: integer("confirmed_locally").notNull().default(0),
+  itemsJson: text("items_json"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
