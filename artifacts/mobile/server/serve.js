@@ -4,6 +4,7 @@
  * Serves the output of build.js (static-build/) with two special routes:
  * - GET / or /manifest with expo-platform header → platform manifest JSON
  * - GET / without expo-platform → landing page HTML
+ * /api/* requests are proxied to the API server on port 8080.
  * Everything else falls through to static file serving from ./static-build/.
  *
  * Zero external dependencies — uses only Node.js built-ins (http, fs, path).
@@ -12,6 +13,31 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+
+const API_PORT = parseInt(process.env.API_PORT || "8080", 10);
+
+function proxyToApi(req, res, pathname) {
+  const options = {
+    hostname: "localhost",
+    port: API_PORT,
+    path: req.url,
+    method: req.method,
+    headers: { ...req.headers, host: `localhost:${API_PORT}` },
+  };
+
+  const proxyReq = http.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res, { end: true });
+  });
+
+  proxyReq.on("error", (err) => {
+    console.error("API proxy error:", err.message);
+    res.writeHead(502);
+    res.end("Bad Gateway");
+  });
+
+  req.pipe(proxyReq, { end: true });
+}
 
 const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
 const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
@@ -113,6 +139,10 @@ const server = http.createServer((req, res) => {
 
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";
+  }
+
+  if (pathname.startsWith("/api/") || pathname === "/api") {
+    return proxyToApi(req, res, pathname);
   }
 
   if (pathname === "/" || pathname === "/manifest") {
