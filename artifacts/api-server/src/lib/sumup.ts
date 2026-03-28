@@ -136,80 +136,100 @@ async function refreshUserToken(refreshTok: string): Promise<{ access_token: str
   return res.json() as Promise<{ access_token: string; refresh_token?: string }>;
 }
 
+async function clearUserToken(): Promise<void> {
+  process.env["SUMUP_USER_TOKEN"] = "";
+  await setDbToken("sumup_user_token", "");
+}
+
+export async function refreshAndGetUserToken(): Promise<string> {
+  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"] || await getDbToken("sumup_refresh_token");
+  if (!refreshToken) {
+    throw new Error("Aucun refresh token SumUp disponible. Veuillez vous reconnecter via Paramètres.");
+  }
+  const data = await refreshUserToken(refreshToken);
+  if (!data?.access_token) {
+    throw new Error("Échec du renouvellement du token SumUp. Veuillez vous reconnecter via Paramètres.");
+  }
+  await persistSumUpTokens(data.access_token, data.refresh_token ?? refreshToken);
+  return data.access_token;
+}
+
 async function getUserToken(): Promise<string> {
-  // 1. Try in-memory env var (fastest path)
+  // 1. Try in-memory env var (fastest path) — but only if non-empty
   const userToken = process.env["SUMUP_USER_TOKEN"];
   if (userToken) return userToken;
 
-  // 2. Load from DB (survives restarts, shared between dev/prod)
+  // 2. Load from DB (survives restarts)
   const dbToken = await getDbToken("sumup_user_token");
   if (dbToken) {
     process.env["SUMUP_USER_TOKEN"] = dbToken;
     return dbToken;
   }
 
-  // 3. Try refresh token (env var first, then DB)
-  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"] || await getDbToken("sumup_refresh_token");
-  if (refreshToken) {
-    const data = await refreshUserToken(refreshToken);
-    if (data?.access_token) {
-      await persistSumUpTokens(data.access_token, data.refresh_token ?? refreshToken);
-      return data.access_token;
-    }
-  }
+  // 3. Try refresh token → get fresh access token
+  return refreshAndGetUserToken();
+}
 
-  throw new Error("Aucun token utilisateur SumUp disponible. Veuillez vous connecter via Paramètres → Connecter SumUp.");
+async function doSendToReader(token: string, readerId: string, opts: { amountEur: number; currency: string; description?: string; clientRef: string }): Promise<{ status: number; text: string; ok: boolean }> {
+  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
+
+  // Primary: Merchant Readers API — links payment to checkout for auto-status-update
+  const res = await fetch(
+    `${SUMUP_BASE}/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ checkout_id: opts.clientRef }),
+    }
+  );
+  if (res.ok) return { status: res.status, text: "", ok: true };
+
+  const txt = await res.text();
+  // Don't fallback on 422 — surface the error immediately
+  if (res.status === 422) return { status: 422, text: txt, ok: false };
+
+  // Fallback: legacy terminals endpoint
+  const res2 = await fetch(`${SUMUP_BASE}/v0.1/terminals/${readerId}/checkout`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      amount: opts.amountEur,
+      currency: opts.currency,
+      client_id: opts.clientRef,
+      description: opts.description ?? "LNT Paris",
+    }),
+  });
+  const txt2 = await res2.text();
+  return { status: res2.status, text: `${txt2} (merchants: ${res.status}: ${txt})`, ok: res2.ok };
 }
 
 export async function sendCheckoutToReader(
   readerId: string,
   opts: { amountEur: number; currency: string; description?: string; clientRef: string }
 ): Promise<void> {
-  const token = await getUserToken();
-  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
+  let token = await getUserToken();
 
-  // Use the Merchant Readers API — this links the terminal payment to the checkout
-  // object so that GET /v0.1/checkouts/{id} updates to PAID automatically.
-  const res = await fetch(
-    `${SUMUP_BASE}/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ checkout_id: opts.clientRef }),
+  let result = await doSendToReader(token, readerId, opts);
+
+  // If 401 → token expired → refresh and retry once
+  if (result.status === 401) {
+    await clearUserToken();
+    try {
+      token = await refreshAndGetUserToken();
+      result = await doSendToReader(token, readerId, opts);
+    } catch {
+      throw new Error("Token SumUp expiré et renouvellement impossible. Veuillez vous reconnecter via Paramètres.");
     }
-  );
+  }
 
-  if (!res.ok) {
-    const txt = await res.text();
-    if (res.status === 401) process.env["SUMUP_USER_TOKEN"] = "";
-    if (res.status === 422 && txt.includes("pending transaction already exists")) {
+  if (!result.ok) {
+    if (result.status === 422 && result.text.includes("pending transaction already exists")) {
       throw new Error("Un paiement est déjà en cours sur le terminal. Annulez-le sur le terminal SumUp puis réessayez.");
     }
-    // Fallback to legacy terminals endpoint if merchants endpoint fails
-    const res2 = await fetch(`${SUMUP_BASE}/v0.1/terminals/${readerId}/checkout`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        amount: opts.amountEur,
-        currency: opts.currency,
-        client_id: opts.clientRef,
-        description: opts.description ?? "LNT Paris",
-      }),
-    });
-    if (!res2.ok) {
-      const txt2 = await res2.text();
-      if (res2.status === 401) process.env["SUMUP_USER_TOKEN"] = "";
-      if (res2.status === 422 && txt2.includes("pending transaction already exists")) {
-        throw new Error("Un paiement est déjà en cours sur le terminal. Annulez-le sur le terminal SumUp puis réessayez.");
-      }
-      throw new Error(`SumUp sendToReader error ${res2.status}: ${txt2} (merchants: ${res.status}: ${txt})`);
+    if (result.status === 401) {
+      throw new Error("Token SumUp expiré. Veuillez vous reconnecter via Paramètres → Connecter SumUp.");
     }
+    throw new Error(`SumUp sendToReader error ${result.status}: ${result.text}`);
   }
 }
 
