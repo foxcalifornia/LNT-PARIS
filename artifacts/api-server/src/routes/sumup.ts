@@ -8,6 +8,7 @@ import {
   sendCheckoutToReader,
   getSumUpCheckoutStatus,
   deleteSumUpCheckout,
+  getTerminalTransactionByClientRef,
 } from "../lib/sumup";
 import { decrementerConsommables } from "../lib/consommables";
 
@@ -127,21 +128,35 @@ router.get("/status/:saleReference", async (req, res) => {
       return;
     }
 
-    const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
-    await logPayment({ saleReference, action: "status_poll", responsePayload: { status: sumupStatus.status }, statut: sumupStatus.status });
+    // 1. Check the SumUp checkout status (online checkout)
+    let dbStatut = "PENDING";
+    let transactionId: string | undefined;
+    try {
+      const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
+      await logPayment({ saleReference, action: "status_poll", responsePayload: { status: sumupStatus.status }, statut: sumupStatus.status });
+      const normalized = sumupStatus.status.toUpperCase();
+      dbStatut = normalized === "PAID" ? "PAID"
+        : normalized === "FAILED" || normalized === "EXPIRED" ? "FAILED"
+        : "PENDING";
+      transactionId = sumupStatus.transaction_id;
+    } catch { /* ignore */ }
 
-    const normalized = sumupStatus.status.toUpperCase();
-    const dbStatut = normalized === "PAID" ? "PAID"
-      : normalized === "FAILED" || normalized === "EXPIRED" ? "FAILED"
-      : "PENDING";
+    // 2. If still PENDING, check terminal transaction history (requires transactions.history scope)
+    if (dbStatut === "PENDING") {
+      const termTx = await getTerminalTransactionByClientRef(record.sumupCheckoutId);
+      if (termTx?.status === "PAID") {
+        dbStatut = "PAID";
+        transactionId = termTx.id;
+        await logPayment({ saleReference, action: "terminal_tx_found", responsePayload: termTx, statut: "PAID" });
+      }
+    }
 
     if (dbStatut !== record.statut) {
       await db
         .update(sumupCheckoutsTable)
         .set({
           statut: dbStatut,
-          sumupTransactionId: sumupStatus.transaction_id ?? null,
-          rawResponse: JSON.stringify(sumupStatus.raw),
+          sumupTransactionId: transactionId ?? null,
           ...(dbStatut === "PAID" ? { paidAt: new Date() } : {}),
         })
         .where(eq(sumupCheckoutsTable.saleReference, saleReference));

@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -327,6 +328,21 @@ function SectionPaiements({
   const [cardEnabled, setCardEnabled] = useState(settings.card_payment_enabled === "true");
   const sumupClientId = process.env.EXPO_PUBLIC_SUMUP_CLIENT_ID;
 
+  const handleReconnectSumUp = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      "Reconnecter SumUp",
+      "Vous allez être redirigé vers SumUp pour autoriser l'application. Après avoir confirmé, les paiements terminaux seront détectés automatiquement.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Continuer",
+          onPress: () => Linking.openURL("https://lntparis.replit.app/sumup-connect"),
+        },
+      ]
+    );
+  };
+
   return (
     <SectionCard
       icon="credit-card"
@@ -343,6 +359,14 @@ function SectionPaiements({
         value="200101010081"
         valueColor={COLORS.textSecondary}
       />
+      <View style={styles.divider} />
+      <Pressable
+        style={({ pressed }) => [styles.reconnectBtn, pressed && { opacity: 0.75 }]}
+        onPress={handleReconnectSumUp}
+      >
+        <Feather name="refresh-cw" size={15} color={COLORS.card_payment} />
+        <Text style={styles.reconnectBtnText}>Reconnecter SumUp (détection auto)</Text>
+      </Pressable>
       <View style={styles.divider} />
       <View style={styles.switchRow}>
         <View style={styles.flex}>
@@ -637,6 +661,17 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.border,
     marginVertical: 8,
+  },
+  reconnectBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 10, borderWidth: 1.5,
+    borderColor: COLORS.card_payment + "40",
+    backgroundColor: COLORS.card_payment + "08",
+    marginVertical: 4,
+  },
+  reconnectBtnText: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold", color: COLORS.card_payment,
   },
   field: {
     gap: 6,
