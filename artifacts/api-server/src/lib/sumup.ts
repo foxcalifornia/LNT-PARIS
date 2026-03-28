@@ -126,25 +126,31 @@ async function getUserToken(): Promise<string> {
 
 export async function sendCheckoutToReader(
   readerId: string,
-  checkoutId: string
+  opts: { amountEur: number; currency: string; description?: string; clientRef: string }
 ): Promise<void> {
   const token = await getUserToken();
-  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
 
-  const res = await fetch(`${SUMUP_BASE}/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`, {
+  const res = await fetch(`${SUMUP_BASE}/v0.1/terminals/${readerId}/checkout`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ checkout_id: checkoutId }),
+    body: JSON.stringify({
+      amount: opts.amountEur,
+      currency: opts.currency,
+      client_id: opts.clientRef,
+      description: opts.description ?? "LNT Paris",
+    }),
   });
 
   if (!res.ok) {
     const txt = await res.text();
-    // If token expired, clear it so next call will refresh
     if (res.status === 401) {
       process.env["SUMUP_USER_TOKEN"] = "";
+    }
+    if (res.status === 422 && txt.includes("pending transaction already exists")) {
+      throw new Error("Un paiement est déjà en cours sur le terminal. Annulez-le sur le terminal SumUp puis réessayez.");
     }
     throw new Error(`SumUp sendToReader error ${res.status}: ${txt}`);
   }

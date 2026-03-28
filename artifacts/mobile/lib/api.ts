@@ -232,6 +232,7 @@ export const api = {
     confirm: (data: {
       saleReference: string;
       items: { produitId: number; quantite: number }[];
+      forceConfirm?: boolean;
     }) =>
       request<{ message: string; saleReference: string }>(
         "/payments/confirm",

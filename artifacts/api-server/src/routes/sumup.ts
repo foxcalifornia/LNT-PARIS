@@ -71,11 +71,19 @@ router.post("/create", async (req, res) => {
     const readerId = process.env["SUMUP_READER_ID"];
     if (readerId) {
       try {
-        await sendCheckoutToReader(readerId, checkout.id);
+        await sendCheckoutToReader(readerId, {
+          amountEur,
+          currency: "EUR",
+          description: desc,
+          clientRef: checkout.id,
+        });
         await logPayment({ saleReference, action: "sent_to_reader", statut: "OK" });
       } catch (readerErr) {
         req.log.warn({ err: readerErr }, "sendToReader failed — checkout created but not sent to reader");
         await logPayment({ saleReference, action: "sent_to_reader_error", statut: "ERROR", responsePayload: String(readerErr) });
+        // Return error so mobile can show the specific message
+        res.status(500).json({ error: String((readerErr as Error).message) });
+        return;
       }
     }
 
@@ -143,9 +151,10 @@ router.get("/status/:saleReference", async (req, res) => {
 
 router.post("/confirm", async (req, res) => {
   try {
-    const { saleReference, items } = req.body as {
+    const { saleReference, items, forceConfirm } = req.body as {
       saleReference: string;
       items: { produitId: number; quantite: number }[];
+      forceConfirm?: boolean;
     };
 
     if (!saleReference || !items || items.length === 0) {
@@ -169,18 +178,27 @@ router.post("/confirm", async (req, res) => {
     }
 
     if (record.statut !== "PAID") {
-      let actualStatus = record.statut;
-      if (record.sumupCheckoutId) {
-        const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
-        actualStatus = sumupStatus.status.toUpperCase() === "PAID" ? "PAID" : sumupStatus.status.toUpperCase();
+      if (forceConfirm) {
+        // Manual confirmation by vendeur — trust that the terminal showed payment accepted
+        await db.update(sumupCheckoutsTable)
+          .set({ statut: "PAID", paidAt: new Date() })
+          .where(eq(sumupCheckoutsTable.saleReference, saleReference));
+      } else {
+        let actualStatus = record.statut;
+        if (record.sumupCheckoutId) {
+          try {
+            const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
+            actualStatus = sumupStatus.status.toUpperCase() === "PAID" ? "PAID" : sumupStatus.status.toUpperCase();
+          } catch { /* ignore polling errors */ }
+        }
+        if (actualStatus !== "PAID") {
+          res.status(402).json({ error: `Paiement non confirmé par SumUp (statut: ${actualStatus})` });
+          return;
+        }
+        await db.update(sumupCheckoutsTable)
+          .set({ statut: "PAID", paidAt: new Date() })
+          .where(eq(sumupCheckoutsTable.saleReference, saleReference));
       }
-      if (actualStatus !== "PAID") {
-        res.status(402).json({ error: `Paiement non confirmé par SumUp (statut: ${actualStatus})` });
-        return;
-      }
-      await db.update(sumupCheckoutsTable)
-        .set({ statut: "PAID", paidAt: new Date() })
-        .where(eq(sumupCheckoutsTable.saleReference, saleReference));
     }
 
     let totalArticles = 0;

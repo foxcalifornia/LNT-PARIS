@@ -186,6 +186,39 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     setTerminalError(null);
   };
 
+  const handleManualConfirm = async () => {
+    if (!saleReference) return;
+    stopPolling();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setTerminalState("creating");
+    try {
+      await api.payments.confirm({
+        saleReference,
+        items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+        forceConfirm: true,
+      });
+      await onRefreshAfterVente();
+      setTerminalState("paid");
+      setSuccessMode("carte");
+      setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal });
+      setSuccess(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => {
+        setSuccess(false);
+        setSuccessMode(null);
+        setSuccessSnapshot(null);
+        setTerminalState("idle");
+        setSaleReference(null);
+        onCartChange([]);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      setTerminalState("failed");
+      setTerminalError((err as Error).message ?? "Erreur lors de la confirmation");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
   const handleRetryOrBack = () => {
     setTerminalState("idle");
     setSaleReference(null);
@@ -270,6 +303,10 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
+          <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
+            <Feather name="check-circle" size={16} color="#fff" />
+            <Text style={styles.terminalConfirmText}>✓ Paiement reçu sur le terminal</Text>
+          </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
             <Text style={styles.terminalCancelText}>Annuler le paiement</Text>
@@ -608,9 +645,17 @@ const styles = StyleSheet.create({
     fontSize: 11, fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary, letterSpacing: 0.3, marginTop: 4,
   },
+  terminalConfirmBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginTop: 20, paddingHorizontal: 24, paddingVertical: 14,
+    borderRadius: 14, backgroundColor: COLORS.cash,
+  },
+  terminalConfirmText: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
+  },
   terminalCancelBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    marginTop: 24, paddingHorizontal: 20, paddingVertical: 12,
+    marginTop: 10, paddingHorizontal: 20, paddingVertical: 12,
     borderWidth: 1.5, borderColor: COLORS.danger + "40",
     borderRadius: 14, backgroundColor: COLORS.danger + "08",
   },
