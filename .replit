@@ -28,10 +28,10 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-SUMUP_READER_ID = "200101010081"
 SUMUP_MERCHANT_CODE = "MC4VDM6U"
 SUMUP_CLIENT_ID = "cc_classic_3lcDQHRMJH1MKUls4LnbE8hkDvQNb"
 SUMUP_CLIENT_SECRET = "cc_sk_classic_MhuszDMDgZXvA9Y4OcDF4bcV7UDABRXykDBXkxBealtEHkp00g"
+SUMUP_READER_ID = "rdr_1NSYDFW7HZ8YN8F6P4TK2MZQ4W"
 
 [nix]
 channel = "stable-25_05"

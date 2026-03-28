@@ -55,6 +55,7 @@ app.get("/callback", async (req: Request, res: Response) => {
   try {
     const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
     const CLIENT_SECRET = process.env["SUMUP_CLIENT_SECRET"] ?? "";
+    const MERCHANT_CODE = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
     const REDIRECT_URI = "https://lntparis.replit.app/callback";
 
     const tokenRes = await fetch("https://api.sumup.com/token", {
@@ -81,28 +82,80 @@ app.get("/callback", async (req: Request, res: Response) => {
     }
 
     const userToken = tokenData["access_token"] as string;
+    const refreshToken = (tokenData["refresh_token"] as string) ?? "";
 
-    const readersRes = await fetch("https://api.sumup.com/v0.1/readers", {
+    // Store the refresh token and access token in memory for use by the reader endpoints
+    process.env["SUMUP_USER_TOKEN"] = userToken;
+    process.env["SUMUP_REFRESH_TOKEN"] = refreshToken;
+
+    logger.info({ refreshToken: refreshToken.slice(0, 20) + "..." }, "SumUp OAuth tokens stored in memory");
+
+    // List readers using merchant-specific endpoint
+    const readersRes = await fetch(`https://api.sumup.com/v0.1/merchants/${MERCHANT_CODE}/readers`, {
       headers: { "Authorization": `Bearer ${userToken}` },
     });
+    const readersData = await readersRes.json() as { items?: Array<{ id: string; name: string; status: string; device?: { model: string; identifier: string } }> };
 
-    const readersData = await readersRes.json() as unknown;
+    // Try to send a test checkout to the first reader
+    let checkoutTestResult = "Non testé";
+    let readerIdFound = "";
+    if (readersData.items && readersData.items.length > 0) {
+      readerIdFound = readersData.items[0].id;
 
-    const terminalsRes = await fetch("https://api.sumup.com/v0.1/merchants/MC4VDM6U/readers", {
-      headers: { "Authorization": `Bearer ${userToken}` },
-    });
-    const terminalsData = await terminalsRes.json() as unknown;
+      // Create a test checkout
+      const checkoutRes = await fetch("https://api.sumup.com/v0.1/checkouts", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkout_reference: `TEST-LIVE-${Date.now()}`,
+          amount: 1.00,
+          currency: "EUR",
+          description: "Test terminal LNT",
+          merchant_code: MERCHANT_CODE,
+        }),
+      });
+      const checkoutData = await checkoutRes.json() as Record<string, unknown>;
+      const checkoutId = checkoutData["id"] as string;
+
+      if (checkoutId) {
+        // Send to reader
+        const sendRes = await fetch(
+          `https://api.sumup.com/v0.1/merchants/${MERCHANT_CODE}/readers/${readerIdFound}/checkout`,
+          {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${userToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ checkout_id: checkoutId }),
+          }
+        );
+        const sendData = await sendRes.json() as unknown;
+        checkoutTestResult = `HTTP ${sendRes.status}: ${JSON.stringify(sendData, null, 2)}`;
+
+        // Store reader ID
+        process.env["SUMUP_READER_ID"] = readerIdFound;
+        logger.info({ readerIdFound }, "SumUp reader ID confirmed");
+      }
+    }
 
     return res.send(`
-      <html><body style="font-family:sans-serif;padding:2rem;background:#1a1a1a;color:#fff">
+      <html><body style="font-family:sans-serif;padding:2rem;background:#1a1a1a;color:#fff;max-width:800px">
         <h2 style="color:#C9AD71">✅ Autorisation SumUp réussie !</h2>
-        <p>Token obtenu avec succès.</p>
-        <h3>Readers (/v0.1/readers) — HTTP ${readersRes.status}:</h3>
+
+        <h3 style="color:#C9AD71">Terminaux enregistrés (HTTP ${readersRes.status}):</h3>
         <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify(readersData, null, 2)}</pre>
-        <h3>Readers (/v0.1/merchants/MC4VDM6U/readers) — HTTP ${terminalsRes.status}:</h3>
-        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify(terminalsData, null, 2)}</pre>
-        <h3>Token info:</h3>
-        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify({ token_type: tokenData["token_type"], scope: tokenData["scope"], expires_in: tokenData["expires_in"] }, null, 2)}</pre>
+
+        <h3 style="color:#C9AD71">Test envoi paiement au terminal:</h3>
+        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${checkoutTestResult}</pre>
+
+        <h3 style="color:#C9AD71">Tokens stockés:</h3>
+        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify({
+          access_token: userToken ? userToken.slice(0, 30) + "..." : "ABSENT",
+          refresh_token: refreshToken ? refreshToken.slice(0, 30) + "..." : "ABSENT",
+          scope: tokenData["scope"],
+          expires_in: tokenData["expires_in"],
+          reader_id_stored: readerIdFound,
+        }, null, 2)}</pre>
+
+        <p style="color:#aaa;margin-top:2rem">Vous pouvez fermer cette page et retourner à l'application LNT Paris.</p>
       </body></html>
     `);
   } catch (err) {

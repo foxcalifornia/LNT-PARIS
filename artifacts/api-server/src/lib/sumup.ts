@@ -91,13 +91,47 @@ export async function createSumUpCheckout(opts: {
   return res.json() as Promise<{ id: string; checkout_reference: string; status: string }>;
 }
 
+async function getUserToken(): Promise<string> {
+  // Try user token first (obtained via OAuth authorization_code flow)
+  const userToken = process.env["SUMUP_USER_TOKEN"];
+  if (userToken) return userToken;
+
+  // Try refresh token to get a new user token
+  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"];
+  if (refreshToken) {
+    const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
+    const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
+    const res = await fetch(`${SUMUP_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json() as { access_token?: string; refresh_token?: string };
+      if (data.access_token) {
+        process.env["SUMUP_USER_TOKEN"] = data.access_token;
+        if (data.refresh_token) process.env["SUMUP_REFRESH_TOKEN"] = data.refresh_token;
+        return data.access_token;
+      }
+    }
+  }
+
+  throw new Error("Aucun token utilisateur SumUp disponible. Veuillez vous connecter via Paramètres → Connecter SumUp.");
+}
+
 export async function sendCheckoutToReader(
   readerId: string,
   checkoutId: string
 ): Promise<void> {
-  const token = await getSumUpToken();
+  const token = await getUserToken();
+  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
 
-  const res = await fetch(`${SUMUP_BASE}/v0.1/readers/${readerId}/checkout`, {
+  const res = await fetch(`${SUMUP_BASE}/v0.1/merchants/${merchantCode}/readers/${readerId}/checkout`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -108,6 +142,10 @@ export async function sendCheckoutToReader(
 
   if (!res.ok) {
     const txt = await res.text();
+    // If token expired, clear it so next call will refresh
+    if (res.status === 401) {
+      process.env["SUMUP_USER_TOKEN"] = "";
+    }
     throw new Error(`SumUp sendToReader error ${res.status}: ${txt}`);
   }
 }
