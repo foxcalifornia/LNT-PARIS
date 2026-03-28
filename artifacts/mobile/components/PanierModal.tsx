@@ -293,19 +293,24 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           <View style={[styles.terminalIcon, { backgroundColor: COLORS.card_payment + "15" }]}>
             <Feather name="credit-card" size={42} color={COLORS.card_payment} />
           </View>
-          <Text style={styles.terminalTitle}>Paiement en attente</Text>
-          <Text style={styles.terminalSub}>Montant affiché sur le terminal SumUp</Text>
+          <Text style={styles.terminalTitle}>En attente du paiement</Text>
           <Text style={styles.terminalAmount}>{formatPrix(totalFinal)}</Text>
-          <View style={styles.terminalPulseDot}>
+          <Text style={styles.terminalSub}>Le montant est affiché sur le SumUp Solo</Text>
+
+          <View style={styles.terminalAutoStatus}>
             <ActivityIndicator size="small" color={COLORS.card_payment} />
-            <Text style={styles.terminalPulseText}>En attente du client…</Text>
+            <Text style={styles.terminalAutoStatusText}>Vérification automatique du paiement…</Text>
           </View>
+
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
+
+          <View style={styles.terminalDivider} />
+          <Text style={styles.terminalFallbackLabel}>Le terminal n'a pas répondu ?</Text>
           <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
             <Feather name="check-circle" size={16} color="#fff" />
-            <Text style={styles.terminalConfirmText}>✓ Paiement reçu sur le terminal</Text>
+            <Text style={styles.terminalConfirmText}>Confirmer manuellement</Text>
           </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
@@ -644,6 +649,25 @@ const styles = StyleSheet.create({
   terminalRef: {
     fontSize: 11, fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary, letterSpacing: 0.3, marginTop: 4,
+  },
+  terminalAutoStatus: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginTop: 16, paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: COLORS.card_payment + "10",
+    borderRadius: 14, borderWidth: 1, borderColor: COLORS.card_payment + "25",
+  },
+  terminalAutoStatusText: {
+    fontSize: 13, fontFamily: "Inter_500Medium",
+    color: COLORS.card_payment, flex: 1,
+  },
+  terminalDivider: {
+    width: "100%" as any, height: 1,
+    backgroundColor: COLORS.border,
+    marginTop: 20, marginBottom: 12,
+  },
+  terminalFallbackLabel: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary, textAlign: "center" as const, marginBottom: 4,
   },
   terminalConfirmBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,

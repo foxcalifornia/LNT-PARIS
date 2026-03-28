@@ -7,6 +7,7 @@ import {
   createSumUpCheckout,
   sendCheckoutToReader,
   getSumUpCheckoutStatus,
+  getTransactionByClientId,
   deleteSumUpCheckout,
 } from "../lib/sumup";
 import { decrementerConsommables } from "../lib/consommables";
@@ -112,31 +113,83 @@ router.get("/status/:saleReference", async (req, res) => {
       return;
     }
 
+    // Already fully confirmed locally — return immediately
     if (record.statut === "CONFIRMED") {
       res.json({ status: "PAID", saleReference, confirmedLocally: true });
       return;
     }
 
-    if (!record.sumupCheckoutId) {
-      res.json({ status: record.statut, saleReference });
+    // Already known as PAID in DB (will be confirmed on next call)
+    if (record.statut === "PAID") {
+      res.json({ status: "PAID", saleReference });
       return;
     }
 
-    const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
-    await logPayment({ saleReference, action: "status_poll", responsePayload: { status: sumupStatus.status }, statut: sumupStatus.status });
+    if (!record.sumupCheckoutId) {
+      res.json({ status: record.statut ?? "PENDING", saleReference });
+      return;
+    }
 
-    const normalized = sumupStatus.status.toUpperCase();
-    const dbStatut = normalized === "PAID" ? "PAID"
-      : normalized === "FAILED" || normalized === "EXPIRED" ? "FAILED"
-      : "PENDING";
+    // ─── Primary: poll transaction history by client_transaction_id ───
+    // The terminal endpoint sends client_id = checkoutId, which appears
+    // as client_transaction_id in the transaction history.
+    let dbStatut: string = record.statut ?? "PENDING";
+    let transactionId: string | undefined;
 
+    try {
+      const txn = await getTransactionByClientId(record.sumupCheckoutId);
+      if (txn) {
+        const s = txn.status.toUpperCase();
+        // SumUp terminal statuses: SUCCESSFUL, FAILED, CANCELLED, PENDING, REFUNDED
+        if (s === "SUCCESSFUL") {
+          dbStatut = "PAID";
+          transactionId = txn.transactionId;
+        } else if (s === "FAILED" || s === "CANCELLED" || s === "EXPIRED") {
+          dbStatut = "FAILED";
+          transactionId = txn.transactionId;
+        }
+        // else still PENDING → keep as is
+
+        await logPayment({
+          saleReference,
+          action: "status_poll_txn_history",
+          responsePayload: { txnStatus: txn.status, transactionId: txn.transactionId },
+          statut: dbStatut,
+        });
+      }
+    } catch (txnErr) {
+      req.log.warn({ err: txnErr }, "getTransactionByClientId failed, falling back to checkout API");
+    }
+
+    // ─── Fallback: poll checkout API (works for online payments) ───
+    if (dbStatut === "PENDING") {
+      try {
+        const checkoutStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
+        const normalized = checkoutStatus.status.toUpperCase();
+        if (normalized === "PAID") {
+          dbStatut = "PAID";
+          transactionId = checkoutStatus.transaction_id;
+        } else if (normalized === "FAILED" || normalized === "EXPIRED") {
+          dbStatut = "FAILED";
+        }
+        await logPayment({
+          saleReference,
+          action: "status_poll_checkout_api",
+          responsePayload: { checkoutStatus: checkoutStatus.status },
+          statut: dbStatut,
+        });
+      } catch {
+        // Checkout API may not have this terminal payment — that's expected
+      }
+    }
+
+    // Persist status change to DB
     if (dbStatut !== record.statut) {
       await db
         .update(sumupCheckoutsTable)
         .set({
           statut: dbStatut,
-          sumupTransactionId: sumupStatus.transaction_id ?? null,
-          rawResponse: JSON.stringify(sumupStatus.raw),
+          ...(transactionId ? { sumupTransactionId: transactionId } : {}),
           ...(dbStatut === "PAID" ? { paidAt: new Date() } : {}),
         })
         .where(eq(sumupCheckoutsTable.saleReference, saleReference));

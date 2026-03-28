@@ -156,6 +156,60 @@ export async function sendCheckoutToReader(
   }
 }
 
+type SumUpTransaction = {
+  id: string;
+  status: string;
+  client_transaction_id?: string;
+  amount?: number;
+  currency?: string;
+  timestamp?: string;
+};
+
+/**
+ * Polls the user's transaction history to find a terminal payment
+ * by its client_transaction_id (= the checkout id we sent as client_id).
+ * Returns null if not found yet (still PENDING on the terminal).
+ */
+export async function getTransactionByClientId(clientId: string): Promise<{
+  status: "SUCCESSFUL" | "FAILED" | "CANCELLED" | "PENDING" | string;
+  transactionId?: string;
+  amount?: number;
+  currency?: string;
+  raw?: unknown;
+} | null> {
+  let token: string;
+  try {
+    token = await getUserToken();
+  } catch {
+    return null;
+  }
+
+  const res = await fetch(`${SUMUP_BASE}/v0.1/me/transactions/history?limit=20&order=created_at.desc`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      process.env["SUMUP_USER_TOKEN"] = "";
+    }
+    return null;
+  }
+
+  const data = await res.json() as { items?: SumUpTransaction[] };
+  const items = data.items ?? [];
+
+  const found = items.find((t) => t.client_transaction_id === clientId);
+  if (!found) return null;
+
+  return {
+    status: found.status,
+    transactionId: found.id,
+    amount: found.amount,
+    currency: found.currency,
+    raw: found,
+  };
+}
+
 export async function getSumUpCheckoutStatus(checkoutId: string): Promise<{
   status: string;
   id: string;
