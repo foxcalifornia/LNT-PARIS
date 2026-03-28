@@ -1,8 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { db } from "@workspace/db";
-import { settingsTable } from "@workspace/db/schema";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -31,7 +29,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/api/callback", async (req: Request, res: Response) => {
+app.use("/api", router);
+
+app.get("/callback", async (req: Request, res: Response) => {
   const { code, error, error_description } = req.query as Record<string, string>;
 
   if (error) {
@@ -55,7 +55,8 @@ app.get("/api/callback", async (req: Request, res: Response) => {
   try {
     const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
     const CLIENT_SECRET = process.env["SUMUP_CLIENT_SECRET"] ?? "";
-    const REDIRECT_URI = "https://lntparis.replit.app/sumup-callback";
+    const MERCHANT_CODE = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
+    const REDIRECT_URI = "https://lntparis.replit.app/callback";
 
     const tokenRes = await fetch("https://api.sumup.com/token", {
       method: "POST",
@@ -82,43 +83,79 @@ app.get("/api/callback", async (req: Request, res: Response) => {
 
     const userToken = tokenData["access_token"] as string;
     const refreshToken = (tokenData["refresh_token"] as string) ?? "";
-    const scope = (tokenData["scope"] as string) ?? "";
 
-    // Store tokens in memory
+    // Store the refresh token and access token in memory for use by the reader endpoints
     process.env["SUMUP_USER_TOKEN"] = userToken;
     process.env["SUMUP_REFRESH_TOKEN"] = refreshToken;
 
-    // Persist refresh token to DB so it survives restarts and is shared between dev/prod
-    if (refreshToken) {
-      await db.insert(settingsTable)
-        .values({ key: "sumup_refresh_token", value: refreshToken })
-        .onConflictDoUpdate({ target: settingsTable.key, set: { value: refreshToken } })
-        .catch((e) => logger.warn({ err: e }, "Failed to persist SumUp refresh token to DB"));
+    logger.info({ refreshToken: refreshToken.slice(0, 20) + "..." }, "SumUp OAuth tokens stored in memory");
+
+    // List readers using merchant-specific endpoint
+    const readersRes = await fetch(`https://api.sumup.com/v0.1/merchants/${MERCHANT_CODE}/readers`, {
+      headers: { "Authorization": `Bearer ${userToken}` },
+    });
+    const readersData = await readersRes.json() as { items?: Array<{ id: string; name: string; status: string; device?: { model: string; identifier: string } }> };
+
+    // Try to send a test checkout to the first reader
+    let checkoutTestResult = "Non testé";
+    let readerIdFound = "";
+    if (readersData.items && readersData.items.length > 0) {
+      readerIdFound = readersData.items[0].id;
+
+      // Create a test checkout
+      const checkoutRes = await fetch("https://api.sumup.com/v0.1/checkouts", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${userToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkout_reference: `TEST-LIVE-${Date.now()}`,
+          amount: 1.00,
+          currency: "EUR",
+          description: "Test terminal LNT",
+          merchant_code: MERCHANT_CODE,
+        }),
+      });
+      const checkoutData = await checkoutRes.json() as Record<string, unknown>;
+      const checkoutId = checkoutData["id"] as string;
+
+      if (checkoutId) {
+        // Send to reader
+        const sendRes = await fetch(
+          `https://api.sumup.com/v0.1/merchants/${MERCHANT_CODE}/readers/${readerIdFound}/checkout`,
+          {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${userToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ checkout_id: checkoutId }),
+          }
+        );
+        const sendData = await sendRes.json() as unknown;
+        checkoutTestResult = `HTTP ${sendRes.status}: ${JSON.stringify(sendData, null, 2)}`;
+
+        // Store reader ID
+        process.env["SUMUP_READER_ID"] = readerIdFound;
+        logger.info({ readerIdFound }, "SumUp reader ID confirmed");
+      }
     }
 
-    logger.info({ scope, refreshToken: refreshToken.slice(0, 20) + "..." }, "SumUp OAuth tokens stored");
-
-    const hasTransactionsScope = scope.includes("transactions.history");
-
     return res.send(`
-      <html><body style="font-family:sans-serif;padding:2rem;background:#1a1a1a;color:#fff;max-width:700px">
-        <h2 style="color:#C9AD71">✅ SumUp reconnecté avec succès !</h2>
+      <html><body style="font-family:sans-serif;padding:2rem;background:#1a1a1a;color:#fff;max-width:800px">
+        <h2 style="color:#C9AD71">✅ Autorisation SumUp réussie !</h2>
 
-        <div style="background:#0d2b0d;border:1px solid #2e7d32;border-radius:8px;padding:1rem;margin:1rem 0">
-          <b style="color:#4caf50">Scopes obtenus :</b><br>
-          <code style="color:#fff">${scope}</code><br><br>
-          ${hasTransactionsScope
-            ? '<b style="color:#4caf50">✅ transactions.history disponible — détection automatique activée !</b>'
-            : '<b style="color:#ff9800">⚠️ transactions.history manquant — détection automatique non disponible</b>'
-          }
-        </div>
+        <h3 style="color:#C9AD71">Terminaux enregistrés (HTTP ${readersRes.status}):</h3>
+        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify(readersData, null, 2)}</pre>
 
-        <div style="background:#111;border-radius:8px;padding:1rem;margin:1rem 0">
-          <b style="color:#C9AD71">Refresh Token (à sauvegarder) :</b><br>
-          <code style="color:#aaa;word-break:break-all;font-size:11px">${refreshToken}</code>
-        </div>
+        <h3 style="color:#C9AD71">Test envoi paiement au terminal:</h3>
+        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${checkoutTestResult}</pre>
 
-        <p style="color:#aaa;margin-top:1rem">✅ Tokens enregistrés. Vous pouvez fermer cette page et retourner à l'application LNT Paris.</p>
+        <h3 style="color:#C9AD71">Tokens stockés:</h3>
+        <pre style="background:#111;padding:1rem;border-radius:8px;overflow:auto">${JSON.stringify({
+          access_token: userToken ? userToken.slice(0, 30) + "..." : "ABSENT",
+          refresh_token: refreshToken ? refreshToken.slice(0, 30) + "..." : "ABSENT",
+          scope: tokenData["scope"],
+          expires_in: tokenData["expires_in"],
+          reader_id_stored: readerIdFound,
+        }, null, 2)}</pre>
+
+        <p style="color:#aaa;margin-top:2rem">Vous pouvez fermer cette page et retourner à l'application LNT Paris.</p>
       </body></html>
     `);
   } catch (err) {
@@ -131,8 +168,5 @@ app.get("/api/callback", async (req: Request, res: Response) => {
     `);
   }
 });
-
-// All other /api/* routes handled by the main router
-app.use("/api", router);
 
 export default app;

@@ -1,7 +1,3 @@
-import { db } from "@workspace/db";
-import { settingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
-
 const SUMUP_BASE = "https://api.sumup.com";
 
 type TokenCache = {
@@ -95,56 +91,37 @@ export async function createSumUpCheckout(opts: {
   return res.json() as Promise<{ id: string; checkout_reference: string; status: string }>;
 }
 
-async function refreshWithToken(refreshToken: string): Promise<string | null> {
-  const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
-  const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
-  const res = await fetch(`${SUMUP_BASE}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-    }),
-  });
-  if (res.ok) {
-    const data = await res.json() as { access_token?: string; refresh_token?: string };
-    if (data.access_token) {
-      process.env["SUMUP_USER_TOKEN"] = data.access_token;
-      if (data.refresh_token) {
-        process.env["SUMUP_REFRESH_TOKEN"] = data.refresh_token;
-      }
-      return data.access_token;
-    }
-  }
-  return null;
-}
-
 async function getUserToken(): Promise<string> {
-  // 1. Try cached user token (valid for 1 hour)
+  // Try user token first (obtained via OAuth authorization_code flow)
   const userToken = process.env["SUMUP_USER_TOKEN"];
   if (userToken) return userToken;
 
-  // 2. Try env var refresh token
-  const envRefresh = process.env["SUMUP_REFRESH_TOKEN"];
-  if (envRefresh) {
-    const token = await refreshWithToken(envRefresh);
-    if (token) return token;
+  // Try refresh token to get a new user token
+  const refreshToken = process.env["SUMUP_REFRESH_TOKEN"];
+  if (refreshToken) {
+    const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
+    const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
+    const res = await fetch(`${SUMUP_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json() as { access_token?: string; refresh_token?: string };
+      if (data.access_token) {
+        process.env["SUMUP_USER_TOKEN"] = data.access_token;
+        if (data.refresh_token) process.env["SUMUP_REFRESH_TOKEN"] = data.refresh_token;
+        return data.access_token;
+      }
+    }
   }
 
-  // 3. Try DB-stored refresh token (persisted across deployments)
-  try {
-    const [row] = await db.select()
-      .from(settingsTable)
-      .where(eq(settingsTable.key, "sumup_refresh_token"));
-    if (row?.value) {
-      const token = await refreshWithToken(row.value);
-      if (token) return token;
-    }
-  } catch { /* DB unavailable */ }
-
-  throw new Error("Aucun token utilisateur SumUp. Allez dans Paramètres → Reconnecter SumUp.");
+  throw new Error("Aucun token utilisateur SumUp disponible. Veuillez vous connecter via Paramètres → Connecter SumUp.");
 }
 
 export async function sendCheckoutToReader(
@@ -208,59 +185,6 @@ export async function getSumUpCheckoutStatus(checkoutId: string): Promise<{
     transaction_id: data.transaction_id,
     raw: data,
   };
-}
-
-export async function getTerminalTransactionByClientRef(clientRef: string): Promise<{
-  status: string;
-  id: string;
-  transaction_code?: string;
-  amount?: number;
-  debugError?: string;
-} | null> {
-  // Try 1: client_credentials token (already requests transactions.history scope)
-  const tryWithToken = async (token: string, label: string): Promise<{
-    status: string; id: string; transaction_code?: string; amount?: number;
-  } | null | { debugError: string }> => {
-    const res = await fetch(
-      `${SUMUP_BASE}/v0.1/me/transactions/history?client_transaction_id=${encodeURIComponent(clientRef)}&limit=5`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok) {
-      const txt = await res.text();
-      return { debugError: `${label} → ${res.status}: ${txt}` };
-    }
-    const data = await res.json() as {
-      items?: Array<{ id: string; status: string; transaction_code?: string; amount?: number }>;
-    };
-    const items = data.items ?? [];
-    const paid = items.find((t) => ["SUCCESSFUL", "PAID"].includes(t.status?.toUpperCase()));
-    if (paid) return { status: "PAID", id: paid.id, transaction_code: paid.transaction_code, amount: paid.amount };
-    if (items.length > 0) return { status: items[0].status ?? "PENDING", id: items[0].id };
-    return null;
-  };
-
-  try {
-    // Try with client_credentials token first (no OAuth needed)
-    const ccToken = await getSumUpToken();
-    const ccResult = await tryWithToken(ccToken, "client_credentials");
-    if (ccResult && !("debugError" in ccResult)) return ccResult;
-
-    // Try with user token (OAuth, may have transactions.history scope)
-    try {
-      const userToken = await getUserToken();
-      const userResult = await tryWithToken(userToken, "user_token");
-      if (userResult && !("debugError" in userResult)) return userResult;
-      if (userResult && "debugError" in userResult) {
-        return { status: "PENDING", id: "", debugError: `cc: ${(ccResult as { debugError: string })?.debugError ?? "null"} | user: ${userResult.debugError}` };
-      }
-    } catch {
-      // No user token configured
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 export async function deleteSumUpCheckout(checkoutId: string): Promise<void> {

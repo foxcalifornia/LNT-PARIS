@@ -3,6 +3,7 @@ previewPath = "/"
 title = "LNT Paris - Gestion de Stock"
 version = "1.0.0"
 id = "artifacts/mobile"
+router = "expo-domain"
 
 [[integratedSkills]]
 name = "expo"

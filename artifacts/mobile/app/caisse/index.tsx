@@ -98,11 +98,9 @@ export default function CaisseScreen() {
     intervalRef.current = setInterval(() => {
       if (!isCaisseHours()) {
         setCaisseState((prev) => {
-          // Admin who force-opened the caisse outside hours keeps it active
           if (prev === "active") {
-            if (isAdmin) return prev;
             setCurrentSession(null);
-            return "closed_hours";
+            return isAdmin ? "admin_view" : "closed_hours";
           }
           if (prev === "need_open") return isAdmin ? "admin_view" : "closed_hours";
           return prev;
@@ -495,12 +493,12 @@ function AdminConsultView({
         </Pressable>
       </View>
 
-      <Pressable style={styles.adminOpenBtn} onPress={onOpen}>
-        <Feather name="unlock" size={18} color="#fff" />
-        <Text style={styles.adminOpenBtnText}>
-          {isCaisseHours() ? "Ouvrir la Caisse" : "Ouvrir la Caisse (hors horaires)"}
-        </Text>
-      </Pressable>
+      {isCaisseHours() && (
+        <Pressable style={styles.adminOpenBtn} onPress={onOpen}>
+          <Feather name="unlock" size={18} color="#fff" />
+          <Text style={styles.adminOpenBtnText}>Ouvrir la Caisse</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }

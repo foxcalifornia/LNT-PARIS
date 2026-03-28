@@ -181,15 +181,42 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     if (saleReference) {
       try { await api.payments.cancel(saleReference); } catch {}
     }
-    // Don't close immediately — show instruction to cancel on device
-    setTerminalState("cancelled");
-    setTerminalError("Appuyez sur ✕ sur le terminal SumUp pour annuler le paiement en cours sur l'appareil.");
-  };
-
-  const handleCloseAfterCancel = () => {
     setTerminalState("idle");
     setSaleReference(null);
     setTerminalError(null);
+  };
+
+  const handleManualConfirm = async () => {
+    if (!saleReference) return;
+    stopPolling();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setTerminalState("creating");
+    try {
+      await api.payments.confirm({
+        saleReference,
+        items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+        forceConfirm: true,
+      });
+      await onRefreshAfterVente();
+      setTerminalState("paid");
+      setSuccessMode("carte");
+      setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal });
+      setSuccess(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => {
+        setSuccess(false);
+        setSuccessMode(null);
+        setSuccessSnapshot(null);
+        setTerminalState("idle");
+        setSaleReference(null);
+        onCartChange([]);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      setTerminalState("failed");
+      setTerminalError((err as Error).message ?? "Erreur lors de la confirmation");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleRetryOrBack = () => {
@@ -276,6 +303,10 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
+          <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
+            <Feather name="check-circle" size={16} color="#fff" />
+            <Text style={styles.terminalConfirmText}>✓ Paiement reçu sur le terminal</Text>
+          </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
             <Text style={styles.terminalCancelText}>Annuler le paiement</Text>
@@ -284,30 +315,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
       );
     }
 
-    if (terminalState === "cancelled") {
-      return (
-        <View style={styles.terminalContainer}>
-          <View style={[styles.terminalIcon, { backgroundColor: "#FFF3E0" }]}>
-            <Feather name="x-circle" size={42} color="#E65100" />
-          </View>
-          <Text style={[styles.terminalTitle, { color: "#E65100" }]}>Annulation en cours</Text>
-          <View style={{ backgroundColor: "#FFF3E0", borderRadius: 12, padding: 16, marginTop: 12, width: "100%" }}>
-            <Text style={[styles.terminalSub, { textAlign: "center", color: "#BF360C", fontFamily: "Inter_600SemiBold" }]}>
-              Appuyez sur ✕ sur le terminal SumUp pour annuler le paiement sur l'appareil.
-            </Text>
-          </View>
-          <Text style={[styles.terminalSub, { marginTop: 10 }]}>
-            La vente a été annulée dans l'application. Le panier est conservé.
-          </Text>
-          <Pressable style={styles.terminalRetryBtn} onPress={handleCloseAfterCancel}>
-            <Feather name="arrow-left" size={16} color={COLORS.card_payment} />
-            <Text style={styles.terminalRetryText}>Retour au panier</Text>
-          </Pressable>
-        </View>
-      );
-    }
-
-    if (terminalState === "failed") {
+    if (terminalState === "failed" || terminalState === "cancelled") {
       const isPermissionsError = terminalError?.toLowerCase().includes("permissions") || terminalError?.toLowerCase().includes("scope");
       const displayMessage = isPermissionsError
         ? "L'application SumUp n'a pas les droits nécessaires pour créer un paiement. Activez le scope « payments » sur developer.sumup.com."
@@ -319,7 +327,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             <Feather name={isPermissionsError ? "lock" : "alert-circle"} size={42} color={COLORS.danger} />
           </View>
           <Text style={[styles.terminalTitle, { color: COLORS.danger }]}>
-            {isPermissionsError ? "Configuration requise" : "Paiement échoué"}
+            {terminalState === "cancelled" ? "Paiement annulé" : isPermissionsError ? "Configuration requise" : "Paiement échoué"}
           </Text>
           <ScrollView
             style={{ maxHeight: 120, width: "100%" }}

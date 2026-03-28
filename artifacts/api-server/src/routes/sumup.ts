@@ -8,7 +8,6 @@ import {
   sendCheckoutToReader,
   getSumUpCheckoutStatus,
   deleteSumUpCheckout,
-  getTerminalTransactionByClientRef,
 } from "../lib/sumup";
 import { decrementerConsommables } from "../lib/consommables";
 
@@ -42,10 +41,6 @@ router.post("/create", async (req, res) => {
       res.status(400).json({ error: "Montant invalide" });
       return;
     }
-    if (montantCentimes < 100) {
-      res.status(400).json({ error: "Montant minimum : 1,00 € pour un paiement par terminal SumUp" });
-      return;
-    }
     if (!items || items.length === 0) {
       res.status(400).json({ error: "Panier vide" });
       return;
@@ -71,7 +66,6 @@ router.post("/create", async (req, res) => {
       sumupCheckoutId: checkout.id,
       montantCentimes,
       statut: "PENDING",
-      itemsJson: JSON.stringify(items),
     });
 
     const readerId = process.env["SUMUP_READER_ID"];
@@ -105,9 +99,6 @@ router.post("/create", async (req, res) => {
 });
 
 router.get("/status/:saleReference", async (req, res) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
   try {
     const { saleReference } = req.params;
 
@@ -131,37 +122,21 @@ router.get("/status/:saleReference", async (req, res) => {
       return;
     }
 
-    // 1. Check the SumUp checkout status (online checkout)
-    let dbStatut = "PENDING";
-    let transactionId: string | undefined;
-    try {
-      const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
-      await logPayment({ saleReference, action: "status_poll", responsePayload: { status: sumupStatus.status }, statut: sumupStatus.status });
-      const normalized = sumupStatus.status.toUpperCase();
-      dbStatut = normalized === "PAID" ? "PAID"
-        : normalized === "FAILED" || normalized === "EXPIRED" ? "FAILED"
-        : "PENDING";
-      transactionId = sumupStatus.transaction_id;
-    } catch { /* ignore */ }
+    const sumupStatus = await getSumUpCheckoutStatus(record.sumupCheckoutId);
+    await logPayment({ saleReference, action: "status_poll", responsePayload: { status: sumupStatus.status }, statut: sumupStatus.status });
 
-    // 2. If still PENDING, check terminal transaction history
-    if (dbStatut === "PENDING") {
-      const termTx = await getTerminalTransactionByClientRef(record.sumupCheckoutId);
-      if (termTx?.status === "PAID") {
-        dbStatut = "PAID";
-        transactionId = termTx.id;
-        await logPayment({ saleReference, action: "terminal_tx_found", responsePayload: termTx, statut: "PAID" });
-      } else if (termTx && "debugError" in termTx && termTx.debugError) {
-        await logPayment({ saleReference, action: "terminal_tx_debug", responsePayload: { debugError: termTx.debugError }, statut: "PENDING" });
-      }
-    }
+    const normalized = sumupStatus.status.toUpperCase();
+    const dbStatut = normalized === "PAID" ? "PAID"
+      : normalized === "FAILED" || normalized === "EXPIRED" ? "FAILED"
+      : "PENDING";
 
     if (dbStatut !== record.statut) {
       await db
         .update(sumupCheckoutsTable)
         .set({
           statut: dbStatut,
-          sumupTransactionId: transactionId ?? null,
+          sumupTransactionId: sumupStatus.transaction_id ?? null,
+          rawResponse: JSON.stringify(sumupStatus.raw),
           ...(dbStatut === "PAID" ? { paidAt: new Date() } : {}),
         })
         .where(eq(sumupCheckoutsTable.saleReference, saleReference));
@@ -176,14 +151,14 @@ router.get("/status/:saleReference", async (req, res) => {
 
 router.post("/confirm", async (req, res) => {
   try {
-    const { saleReference, items: bodyItems, forceConfirm } = req.body as {
+    const { saleReference, items, forceConfirm } = req.body as {
       saleReference: string;
-      items?: { produitId: number; quantite: number }[];
+      items: { produitId: number; quantite: number }[];
       forceConfirm?: boolean;
     };
 
-    if (!saleReference) {
-      res.status(400).json({ error: "Référence de vente manquante" });
+    if (!saleReference || !items || items.length === 0) {
+      res.status(400).json({ error: "Données manquantes" });
       return;
     }
 
@@ -225,14 +200,6 @@ router.post("/confirm", async (req, res) => {
           .where(eq(sumupCheckoutsTable.saleReference, saleReference));
       }
     }
-
-    // Use items from body, or fall back to stored items in DB
-    const items: { produitId: number; quantite: number }[] =
-      bodyItems && bodyItems.length > 0
-        ? bodyItems
-        : record.itemsJson
-          ? (JSON.parse(record.itemsJson) as { produitId: number; quantite: number }[])
-          : [];
 
     let totalArticles = 0;
 
