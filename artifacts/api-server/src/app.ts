@@ -31,9 +31,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
-
-// SumUp OAuth authorization URL
+// SumUp OAuth routes — must be BEFORE app.use("/api", router) to avoid interception
 app.get("/api/sumup-connect", (_req: Request, res: Response) => {
   const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
   const REDIRECT_URI = "https://lntparis.replit.app/api/callback";
@@ -142,5 +140,8 @@ app.get("/api/callback", async (req: Request, res: Response) => {
     `);
   }
 });
+
+// All other /api/* routes handled by the main router
+app.use("/api", router);
 
 export default app;
