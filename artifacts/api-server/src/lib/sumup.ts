@@ -57,6 +57,11 @@ export async function createSumUpCheckout(opts: {
 }): Promise<{ id: string; checkout_reference: string; status: string }> {
   const token = await getSumUpToken();
 
+  const merchantCode = process.env["SUMUP_MERCHANT_CODE"];
+  if (!merchantCode) {
+    throw new Error("SUMUP_MERCHANT_CODE non configuré");
+  }
+
   const res = await fetch(`${SUMUP_BASE}/v0.1/checkouts`, {
     method: "POST",
     headers: {
@@ -68,6 +73,7 @@ export async function createSumUpCheckout(opts: {
       amount: opts.amountEur,
       currency: opts.currency,
       description: opts.description,
+      merchant_code: merchantCode,
     }),
   });
 
