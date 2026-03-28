@@ -293,24 +293,42 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           <View style={[styles.terminalIcon, { backgroundColor: COLORS.card_payment + "15" }]}>
             <Feather name="credit-card" size={42} color={COLORS.card_payment} />
           </View>
-          <Text style={styles.terminalTitle}>En attente du paiement</Text>
+          <Text style={styles.terminalTitle}>Paiement en cours</Text>
           <Text style={styles.terminalAmount}>{formatPrix(totalFinal)}</Text>
-          <Text style={styles.terminalSub}>Le montant est affiché sur le SumUp Solo</Text>
 
-          <View style={styles.terminalAutoStatus}>
-            <ActivityIndicator size="small" color={COLORS.card_payment} />
-            <Text style={styles.terminalAutoStatusText}>Vérification automatique du paiement…</Text>
+          {/* Step-by-step guide */}
+          <View style={styles.terminalSteps}>
+            <View style={styles.terminalStep}>
+              <View style={[styles.terminalStepDot, { backgroundColor: COLORS.success }]}>
+                <Feather name="check" size={10} color="#fff" />
+              </View>
+              <Text style={styles.terminalStepText}>Montant envoyé au SumUp Solo</Text>
+            </View>
+            <View style={styles.terminalStep}>
+              <View style={[styles.terminalStepDot, { backgroundColor: COLORS.card_payment }]}>
+                <Text style={styles.terminalStepNum}>2</Text>
+              </View>
+              <Text style={[styles.terminalStepText, { fontWeight: "600" }]}>
+                Le client présente sa carte sur le Solo
+              </Text>
+            </View>
+            <View style={styles.terminalStep}>
+              <View style={[styles.terminalStepDot, { backgroundColor: COLORS.textSecondary }]}>
+                <Text style={styles.terminalStepNum}>3</Text>
+              </View>
+              <Text style={styles.terminalStepText}>
+                Quand le Solo affiche <Text style={{ fontWeight: "700" }}>« Approuvé »</Text> → confirmez ici
+              </Text>
+            </View>
           </View>
 
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
 
-          <View style={styles.terminalDivider} />
-          <Text style={styles.terminalFallbackLabel}>Le terminal n'a pas répondu ?</Text>
           <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
-            <Feather name="check-circle" size={16} color="#fff" />
-            <Text style={styles.terminalConfirmText}>Confirmer manuellement</Text>
+            <Feather name="check-circle" size={18} color="#fff" />
+            <Text style={styles.terminalConfirmText}>Solo a approuvé → Confirmer</Text>
           </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
@@ -650,29 +668,31 @@ const styles = StyleSheet.create({
     fontSize: 11, fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary, letterSpacing: 0.3, marginTop: 4,
   },
-  terminalAutoStatus: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    marginTop: 16, paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: COLORS.card_payment + "10",
-    borderRadius: 14, borderWidth: 1, borderColor: COLORS.card_payment + "25",
+  terminalSteps: {
+    alignSelf: "stretch",
+    marginTop: 20, gap: 12,
+    paddingHorizontal: 4,
   },
-  terminalAutoStatusText: {
-    fontSize: 13, fontFamily: "Inter_500Medium",
-    color: COLORS.card_payment, flex: 1,
+  terminalStep: {
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
   },
-  terminalDivider: {
-    width: "100%" as any, height: 1,
-    backgroundColor: COLORS.border,
-    marginTop: 20, marginBottom: 12,
+  terminalStepDot: {
+    width: 22, height: 22, borderRadius: 11,
+    justifyContent: "center", alignItems: "center",
+    flexShrink: 0, marginTop: 1,
   },
-  terminalFallbackLabel: {
-    fontSize: 12, fontFamily: "Inter_400Regular",
-    color: COLORS.textSecondary, textAlign: "center" as const, marginBottom: 4,
+  terminalStepNum: {
+    fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  terminalStepText: {
+    fontSize: 14, fontFamily: "Inter_400Regular",
+    color: COLORS.text, flex: 1, lineHeight: 20,
   },
   terminalConfirmBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    marginTop: 20, paddingHorizontal: 24, paddingVertical: 14,
+    marginTop: 24, paddingHorizontal: 24, paddingVertical: 16,
     borderRadius: 14, backgroundColor: COLORS.cash,
+    alignSelf: "stretch", justifyContent: "center",
   },
   terminalConfirmText: {
     fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
