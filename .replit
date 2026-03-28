@@ -30,7 +30,7 @@ timeoutMs = 20000
 [userenv.shared]
 SUMUP_CLIENT_ID = "cc_classic_wnQZgbUvcxdepmC4GXIzE4suqNlh0"
 SUMUP_CLIENT_SECRET = "cc_sk_classic_SHVXmz1Ck2hbSGX3U8I2kvbDRlJDsVBE8YCQH8fn01JPF5ny9u"
-SUMUP_READER_ID = "virtual_solo_d5d8c2e7-c667-4d99-8ad1-c817be5f34da"
+SUMUP_READER_ID = "07711d69-41a3-4c2b-96f2-e64604eb6203"
 
 [nix]
 channel = "stable-25_05"
