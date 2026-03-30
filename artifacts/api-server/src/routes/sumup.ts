@@ -8,6 +8,7 @@ import {
   sendCheckoutToReader,
   getSumUpCheckoutStatus,
   getTransactionByClientId,
+  getSumUpAnchorTs,
   deleteSumUpCheckout,
 } from "../lib/sumup";
 import { decrementerConsommables } from "../lib/consommables";
@@ -53,6 +54,11 @@ router.post("/create", async (req, res) => {
 
     await logPayment({ saleReference, action: "create_start", requestPayload: { montantCentimes, items } });
 
+    // Fetch the most recent SumUp transaction timestamp as an anchor.
+    // This lets us find only transactions that appeared AFTER this checkout was created,
+    // regardless of any server/SumUp clock offset (Replit env may be ~1 year ahead).
+    const sumupAnchorTs = await getSumUpAnchorTs();
+
     const checkout = await createSumUpCheckout({
       amountEur,
       currency: "EUR",
@@ -67,6 +73,7 @@ router.post("/create", async (req, res) => {
       sumupCheckoutId: checkout.id,
       montantCentimes,
       statut: "PENDING",
+      sumupAnchorTs,
     });
 
     const readerId = process.env["SUMUP_READER_ID"];
@@ -169,6 +176,7 @@ router.get("/status/:saleReference", async (req, res) => {
         const txn = await getTransactionByClientId(
           record.sumupCheckoutId,
           record.montantCentimes / 100,
+          record.sumupAnchorTs,
         );
         if (txn) {
           const s = txn.status.toUpperCase();

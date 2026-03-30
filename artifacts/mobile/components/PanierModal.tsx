@@ -313,23 +313,25 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
               </Text>
             </View>
             <View style={styles.terminalStep}>
-              <View style={[styles.terminalStepDot, { backgroundColor: COLORS.textSecondary }]}>
-                <Text style={styles.terminalStepNum}>3</Text>
+              <View style={[styles.terminalStepDot, { backgroundColor: COLORS.card_payment }]}>
+                <Feather name="zap" size={10} color="#fff" />
               </View>
               <Text style={styles.terminalStepText}>
-                Quand le Solo affiche <Text style={{ fontWeight: "700" }}>« Approuvé »</Text> → confirmez ici
+                L'app détecte le paiement <Text style={{ fontWeight: "700" }}>automatiquement</Text>
               </Text>
             </View>
+          </View>
+
+          {/* Auto-detection indicator */}
+          <View style={styles.terminalAutoDetect}>
+            <ActivityIndicator size="small" color={COLORS.card_payment} />
+            <Text style={styles.terminalAutoDetectText}>Détection automatique en cours…</Text>
           </View>
 
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
           )}
 
-          <Pressable style={styles.terminalConfirmBtn} onPress={handleManualConfirm}>
-            <Feather name="check-circle" size={18} color="#fff" />
-            <Text style={styles.terminalConfirmText}>Solo a approuvé → Confirmer</Text>
-          </Pressable>
           <Pressable style={styles.terminalCancelBtn} onPress={handleCancelTerminal}>
             <Feather name="x-circle" size={16} color={COLORS.danger} />
             <Text style={styles.terminalCancelText}>Annuler le paiement</Text>
@@ -688,6 +690,16 @@ const styles = StyleSheet.create({
     fontSize: 14, fontFamily: "Inter_400Regular",
     color: COLORS.text, flex: 1, lineHeight: 20,
   },
+  terminalAutoDetect: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginTop: 20, paddingHorizontal: 16, paddingVertical: 12,
+    borderRadius: 12, backgroundColor: COLORS.card_payment + "10",
+    borderWidth: 1, borderColor: COLORS.card_payment + "25",
+    alignSelf: "stretch", justifyContent: "center",
+  },
+  terminalAutoDetectText: {
+    fontSize: 13, fontFamily: "Inter_500Medium", color: COLORS.card_payment,
+  },
   terminalConfirmBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
     marginTop: 24, paddingHorizontal: 24, paddingVertical: 16,
@@ -699,7 +711,7 @@ const styles = StyleSheet.create({
   },
   terminalCancelBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    marginTop: 10, paddingHorizontal: 20, paddingVertical: 12,
+    marginTop: 16, paddingHorizontal: 20, paddingVertical: 12,
     borderWidth: 1.5, borderColor: COLORS.danger + "40",
     borderRadius: 14, backgroundColor: COLORS.danger + "08",
   },

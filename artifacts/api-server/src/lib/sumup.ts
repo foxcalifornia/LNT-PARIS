@@ -262,19 +262,50 @@ type SumUpTransaction = {
 };
 
 /**
- * Polls the user's transaction history to find a terminal payment.
- *
- * Strategy:
- *  1. Match by client_transaction_id === clientId (exact match)
- *  2. Fallback: find the most recent SUCCESSFUL/FAILED POS terminal transaction
- *     with the matching amount — no time window (avoids server clock mismatch).
- *     Caller is responsible for deduplication (checking transaction ID not already used).
- *
- * Returns null if no matching completed transaction found yet.
+ * Fetches the most recent SumUp transaction timestamp to use as an anchor.
+ * Call this BEFORE creating a checkout so we can filter only newer transactions later.
  */
+export async function getSumUpAnchorTs(): Promise<string | null> {
+  // Try user token, then refresh if 401
+  const tokensToTry: string[] = [];
+  try { tokensToTry.push(await getUserToken()); } catch { /* ignore */ }
+
+  for (const token of tokensToTry) {
+    try {
+      const res = await fetch(
+        `${SUMUP_BASE}/v0.1/me/transactions/history?limit=1&order=created_at.desc`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.status === 401) {
+        process.env["SUMUP_USER_TOKEN"] = "";
+        // Try refreshing token and retrying once
+        try {
+          const fresh = await refreshAndGetUserToken();
+          const res2 = await fetch(
+            `${SUMUP_BASE}/v0.1/me/transactions/history?limit=1&order=created_at.desc`,
+            { headers: { Authorization: `Bearer ${fresh}` } },
+          );
+          if (res2.ok) {
+            const data2 = await res2.json() as { items?: Array<{ timestamp?: string }> };
+            return data2.items?.[0]?.timestamp ?? null;
+          }
+        } catch { /* ignore */ }
+        return null;
+      }
+      if (!res.ok) return null;
+      const data = await res.json() as { items?: Array<{ timestamp?: string }> };
+      return data.items?.[0]?.timestamp ?? null;
+    } catch {
+      // Try next token
+    }
+  }
+  return null;
+}
+
 export async function getTransactionByClientId(
   clientId: string,
   amountEur?: number,
+  anchorTs?: string | null,
 ): Promise<{
   status: "SUCCESSFUL" | "FAILED" | "CANCELLED" | "PENDING" | string;
   transactionId?: string;
@@ -324,9 +355,12 @@ export async function getTransactionByClientId(
 
   // ── Strategy 2: most recent completed POS terminal transaction with matching amount ──
   // Items are ordered most-recent-first by the API.
-  // No time-window filter: avoids false negatives when server clock differs from SumUp's clock.
-  // The caller deduplicates by checking sumup_transaction_id uniqueness in the DB.
+  // When anchorTs is provided (ISO timestamp of last SumUp tx at checkout creation),
+  // only consider transactions NEWER than the anchor — this avoids matching old same-amount payments.
+  // When anchorTs is absent, accept any matching POS transaction (caller deduplicates via DB check).
   if (amountEur !== undefined) {
+    const anchorTime = anchorTs ? new Date(anchorTs).getTime() : null;
+
     const byAmount = items.find((t) => {
       // Must be a terminal (POS) payment — not an online/ecom payment
       if (t.payment_type && t.payment_type !== "POS") return false;
@@ -335,7 +369,13 @@ export async function getTransactionByClientId(
       if (Math.abs(txAmount - amountEur) > 0.01) return false;
       // Only completed states
       const s = t.status?.toUpperCase();
-      return s === "SUCCESSFUL" || s === "FAILED" || s === "CANCELLED";
+      if (s !== "SUCCESSFUL" && s !== "FAILED" && s !== "CANCELLED") return false;
+      // If we have an anchor, only accept transactions that came AFTER it
+      if (anchorTime !== null && t.timestamp) {
+        const txTime = new Date(t.timestamp).getTime();
+        if (txTime <= anchorTime) return false;
+      }
+      return true;
     });
 
     if (byAmount) {

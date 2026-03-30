@@ -10,6 +10,10 @@ export const sumupCheckoutsTable = pgTable("sumup_checkouts", {
   rawResponse: text("raw_response"),
   paidAt: timestamp("paid_at"),
   confirmedLocally: integer("confirmed_locally").notNull().default(0),
+  // ISO timestamp of the most recent SumUp transaction at checkout creation time.
+  // Used as an anchor to find only transactions that appeared AFTER this checkout was created,
+  // regardless of any server/SumUp clock offset.
+  sumupAnchorTs: text("sumup_anchor_ts"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
