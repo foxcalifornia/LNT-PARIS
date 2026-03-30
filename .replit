@@ -33,6 +33,7 @@ SUMUP_READER_ID = "rdr_1NSYDFW7HZ8YN8F6P4TK2MZQ4W"
 SUMUP_REFRESH_TOKEN = "rt_classic_p4jEYaArMpUIKQRoAeaplb08DhhTGZ66uP66bA1J0YgKHJw9HoKY5"
 SUMUP_USER_TOKEN = "at_classic_wfZ9ux5V3zvQbJcFeqc0nkEfPu4dHshBRIqynuUpTkN2i5jNannbt"
 SUPABASE_DATABASE_URL = "postgresql://postgres.yowfhpixlzbczycdfniy:O5j3fWwAc5vliaIlnuK1MOiq0DWy@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
+GITHUB_PAT = "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"
 
 [userenv.development]
 SUMUP_DEV_CLIENT_ID = "cc_classic_5X3WhQqARmlwslp9gsGdAx90RCSzH"
