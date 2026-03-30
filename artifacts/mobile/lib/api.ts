@@ -283,7 +283,7 @@ export const api = {
   },
 
   settings: {
-    get: () => request<Record<string, string>>("/settings"),
+    get: () => request<Record<string, string>>(`/settings?_t=${Date.now()}`),
     update: (updates: Record<string, string>) =>
       request<{ success: boolean }>("/settings", {
         method: "PUT",

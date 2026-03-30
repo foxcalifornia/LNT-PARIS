@@ -27,6 +27,8 @@ router.get("/settings", async (req, res) => {
         result[row.key] = row.value;
       }
     }
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.set("Pragma", "no-cache");
     res.json(result);
   } catch (error) {
     req.log.error(error);

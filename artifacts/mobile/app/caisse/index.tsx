@@ -337,6 +337,7 @@ function NeedOpenView({
 }) {
   const dateLabel = getTodayLabel();
   const heureLabel = getHeureStr();
+  const { openHour, closeHour } = useSettings();
 
   return (
     <View style={styles.openingContent}>
@@ -353,7 +354,7 @@ function NeedOpenView({
 
         <View style={styles.openingHoursRow}>
           <Feather name="clock" size={13} color={COLORS.textSecondary} />
-          <Text style={styles.openingHoursText}>Horaires : 10h00 – 20h00</Text>
+          <Text style={styles.openingHoursText}>Horaires : {openHour}h00 – {closeHour}h00</Text>
         </View>
       </View>
 
@@ -457,7 +458,7 @@ function AdminConsultView({
         <Text style={styles.adminDateLabel}>{dateLabel}</Text>
         <View style={styles.adminHoursRow}>
           <Feather name="clock" size={13} color={COLORS.textSecondary} />
-          <Text style={styles.adminHoursText}>Horaires : 10h00 – 20h00</Text>
+          <Text style={styles.adminHoursText}>Horaires : {openHour}h00 – {closeHour}h00</Text>
         </View>
       </View>
 
