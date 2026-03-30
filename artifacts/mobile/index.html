@@ -5,97 +5,171 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LNT Paris - Gestion de Stand</title>
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      margin: 0;
-      padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      background: #1a1a1a;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
+      padding: 20px;
     }
-    .container {
-      text-align: center;
+    .card {
       background: white;
-      padding: 40px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      padding: 40px 30px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
       max-width: 400px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 48px;
+      margin-bottom: 20px;
     }
     h1 {
-      margin: 0 0 20px 0;
       color: #333;
       font-size: 24px;
+      margin-bottom: 10px;
+      font-weight: 600;
     }
-    p {
-      margin: 0 0 20px 0;
+    .subtitle {
       color: #666;
+      margin-bottom: 30px;
+      font-size: 16px;
     }
-    .loading {
-      color: #C9AD71;
-      font-weight: bold;
+    .status {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #C9AD71;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .status-text {
+      color: #666;
+      font-size: 14px;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background: #C9AD71;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      margin-top: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+    }
+    .button:hover {
+      background: #b39a5d;
     }
     .error {
       color: #d32f2f;
-      display: none;
-      margin-top: 20px;
-      padding: 10px;
       background: #ffebee;
-      border-radius: 4px;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+      font-size: 14px;
+      display: none;
+    }
+    .error.show {
+      display: block;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>LNT Paris - Gestion de Stand</h1>
-    <p>Chargement de l'application...</p>
-    <p class="loading" id="status">⏳ Recherche du build...</p>
+  <div class="card">
+    <div class="logo">📱</div>
+    <h1>LNT Paris</h1>
+    <p class="subtitle">Gestion de Stand</p>
+    
     <div class="error" id="error"></div>
+    
+    <div class="status">
+      <span class="spinner" id="spinner"></span>
+      <span class="status-text" id="status">Chargement...</span>
+    </div>
+    
+    <button class="button" id="fallback" style="display: none;">
+      Ouvrir manuellement
+    </button>
   </div>
 
   <script>
-    async function findAndLoadApp() {
+    const device = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    async function loadApp() {
       try {
-        // Try to find the latest static build directory
-        const staticBuildResponse = await fetch('./static-build/');
-        if (!staticBuildResponse.ok) {
-          throw new Error('static-build directory not found');
+        document.getElementById('status').textContent = 'Préparation de l\'app...';
+        
+        // Try to fetch the manifest files to verify the build exists
+        const platform = isIOS ? 'ios' : 'android';
+        const manifestUrl = `./static-build/${platform}/manifest.json`;
+        
+        document.getElementById('status').textContent = `Vérification du build ${platform}...`;
+        const manifestResponse = await fetch(manifestUrl);
+        
+        if (!manifestResponse.ok) {
+          throw new Error(`Build ${platform} non trouvé (${manifestResponse.status})`);
         }
         
-        const html = await staticBuildResponse.text();
+        const manifest = await manifestResponse.json();
+        document.getElementById('status').textContent = '✓ App prête!';
         
-        // Extract timestamp directories (format: numbers-numbers)
-        const matches = html.match(/href="(\d+-\d+)\/"/g);
-        if (!matches || matches.length === 0) {
-          throw new Error('No build timestamp found');
+        // For mobile devices, open with Expo Go
+        if (device) {
+          setTimeout(() => {
+            // Use expo protocol to launch the app
+            const expoUrl = `expo+https://lntparis.netlify.app/static-build/${platform}/manifest.json`;
+            window.location.href = expoUrl;
+          }, 800);
+        } else {
+          // For web/desktop, show the direct link
+          document.getElementById('spinner').style.display = 'none';
+          document.getElementById('status').textContent = 'App chargée!';
+          document.getElementById('fallback').style.display = 'inline-block';
+          document.getElementById('fallback').textContent = 'Ouvrir l\'app →';
+          document.getElementById('fallback').href = `./static-build/${platform}/manifest.json`;
         }
-        
-        // Get the latest (last) timestamp
-        const timestamp = matches[matches.length - 1].match(/(\d+-\d+)/)[1];
-        const appPath = `./static-build/${timestamp}/`;
-        
-        console.log('Found build:', timestamp);
-        document.getElementById('status').textContent = '✓ Redirection vers l\'app...';
-        
-        // Redirect to the app
-        setTimeout(() => {
-          window.location.href = appPath;
-        }, 500);
         
       } catch (error) {
-        console.error('Error loading app:', error);
-        document.getElementById('status').textContent = '✗ Erreur de chargement';
-        document.getElementById('error').style.display = 'block';
-        document.getElementById('error').innerHTML = `
-          <strong>Erreur:</strong> ${error.message}<br><br>
-          <small>Rechargez la page ou contactez le support</small>
-        `;
+        console.error(error);
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('status').textContent = '✗ Erreur';
+        
+        const errorDiv = document.getElementById('error');
+        errorDiv.innerHTML = `<strong>Erreur:</strong> ${error.message}<br><small>Vérifiez que l'app a été correctement déployée</small>`;
+        errorDiv.classList.add('show');
+        
+        document.getElementById('fallback').style.display = 'inline-block';
+        document.getElementById('fallback').textContent = 'Réessayer';
+        document.getElementById('fallback').onclick = () => location.reload();
       }
     }
-
+    
     // Start loading
-    findAndLoadApp();
+    loadApp();
   </script>
 </body>
 </html>
