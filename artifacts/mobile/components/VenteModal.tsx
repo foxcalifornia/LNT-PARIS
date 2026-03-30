@@ -356,7 +356,7 @@ function ContactInfoModal({
               <Feather name="user" size={22} color={COLORS.accent} />
             </View>
             <Text style={styles.contactTitle}>Coordonnées client</Text>
-            <Text style={styles.contactSubtitle}>Facultatif — le client peut refuser</Text>
+            <Text style={styles.contactSubtitle}>Enregistrement interne uniquement — aucun SMS/email envoyé</Text>
           </View>
 
           <TextInput

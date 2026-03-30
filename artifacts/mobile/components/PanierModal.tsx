@@ -133,15 +133,6 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
             setSuccess(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setTimeout(() => {
-              setSuccess(false);
-              setSuccessMode(null);
-              setSuccessSnapshot(null);
-              setTerminalState("idle");
-              setSaleReference(null);
-              onCartChange([]);
-              onClose();
-            }, 2000);
           } catch (confirmErr) {
             setTerminalState("failed");
             setTerminalError(`Erreur confirmation: ${(confirmErr as Error).message}`);
@@ -478,6 +469,8 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                   setSuccess(false);
                   setSuccessMode(null);
                   setSuccessSnapshot(null);
+                  setTerminalState("idle");
+                  setSaleReference(null);
                   setLoading(false);
                   setRemiseCentimes(0);
                   setRemiseInput("");
