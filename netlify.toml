@@ -1,0 +1,8 @@
+[build]
+command = "pnpm --filter @workspace/mobile... run build"
+publish = "artifacts/mobile/dist"
+base = "."
+
+[build.environment]
+EXPO_PUBLIC_DOMAIN = "lntparis.netlify.app"
+EXPO_PUBLIC_API_URL = "https://lnt-paris.replit.app/api"
