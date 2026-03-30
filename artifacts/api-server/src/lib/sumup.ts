@@ -326,7 +326,7 @@ export async function getTransactionByClientId(
 
   for (const tok of tokensToTry) {
     const res = await fetch(
-      `${SUMUP_BASE}/v0.1/me/transactions/history?limit=20&order=created_at.desc`,
+      `${SUMUP_BASE}/v0.1/me/transactions/history?limit=100&order=created_at.desc`,
       { headers: { Authorization: `Bearer ${tok}` } },
     );
     if (res.ok) {
@@ -367,9 +367,9 @@ export async function getTransactionByClientId(
       // Match amount within 1 cent tolerance
       const txAmount = typeof t.amount === "number" ? t.amount : parseFloat(String(t.amount));
       if (Math.abs(txAmount - amountEur) > 0.01) return false;
-      // Only completed states
+      // Only SUCCESSFUL — FAILED/CANCELLED cannot validate a sale
       const s = t.status?.toUpperCase();
-      if (s !== "SUCCESSFUL" && s !== "FAILED" && s !== "CANCELLED") return false;
+      if (s !== "SUCCESSFUL") return false;
       // If we have an anchor, only accept transactions that came AFTER it
       if (anchorTime !== null && t.timestamp) {
         const txTime = new Date(t.timestamp).getTime();

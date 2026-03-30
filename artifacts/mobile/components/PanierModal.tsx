@@ -49,8 +49,10 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const [terminalState, setTerminalState] = useState<TerminalState>("idle");
   const [saleReference, setSaleReference] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [showManualConfirm, setShowManualConfirm] = useState(false);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const manualConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStartRef = useRef<number>(0);
   const cartSnapshotRef = useRef<CartItem[]>([]);
 
@@ -65,6 +67,11 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
+    if (manualConfirmTimerRef.current) {
+      clearTimeout(manualConfirmTimerRef.current);
+      manualConfirmTimerRef.current = null;
+    }
+    setShowManualConfirm(false);
   };
 
   useEffect(() => {
@@ -81,6 +88,12 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const startPolling = (ref: string, snap: CartItem[]) => {
     pollStartRef.current = Date.now();
     cartSnapshotRef.current = snap;
+    setShowManualConfirm(false);
+
+    // After 60s, show the manual confirm button as fallback (SumUp history can be delayed)
+    manualConfirmTimerRef.current = setTimeout(() => {
+      setShowManualConfirm(true);
+    }, 60_000);
 
     pollIntervalRef.current = setInterval(async () => {
       if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
@@ -327,6 +340,19 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             <ActivityIndicator size="small" color={COLORS.card_payment} />
             <Text style={styles.terminalAutoDetectText}>Détection automatique en cours…</Text>
           </View>
+
+          {/* Manual confirm fallback — appears after 60s if auto-detection is slow */}
+          {showManualConfirm && (
+            <View style={styles.manualConfirmSection}>
+              <Text style={styles.manualConfirmHint}>
+                Le terminal affiche "Approuvé" mais l'app n'a pas encore détecté le paiement ?
+              </Text>
+              <Pressable style={styles.manualConfirmBtn} onPress={handleManualConfirm}>
+                <Feather name="check-circle" size={16} color="#fff" />
+                <Text style={styles.manualConfirmBtnText}>Le terminal a approuvé — Enregistrer</Text>
+              </Pressable>
+            </View>
+          )}
 
           {saleReference && (
             <Text style={styles.terminalRef}>Réf : {saleReference}</Text>
@@ -708,6 +734,24 @@ const styles = StyleSheet.create({
   },
   terminalConfirmText: {
     fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  manualConfirmSection: {
+    marginTop: 20, alignSelf: "stretch",
+    borderRadius: 14, borderWidth: 1.5, borderColor: COLORS.success + "50",
+    backgroundColor: COLORS.success + "08",
+    padding: 14, gap: 10,
+  },
+  manualConfirmHint: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: COLORS.textSecondary,
+    textAlign: "center", lineHeight: 17,
+  },
+  manualConfirmBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12,
+    backgroundColor: COLORS.success,
+  },
+  manualConfirmBtnText: {
+    fontSize: 14, fontFamily: "Inter_700Bold", color: "#fff",
   },
   terminalCancelBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
