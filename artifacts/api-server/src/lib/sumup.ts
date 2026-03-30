@@ -438,49 +438,76 @@ export async function deleteSumUpCheckout(checkoutId: string): Promise<void> {
   });
 }
 
-/**
- * Send an official SumUp receipt to a customer via email or SMS.
- * Requires a user token with the appropriate scope.
- * @param transactionId - The SumUp transaction UUID (e.g. 940f4c95-f4ac-...)
- * @param contact - Either { email } or { phone } (E.164 format, e.g. +33612345678)
- */
-export async function sendSumUpReceipt(
-  transactionId: string,
-  contact: { email?: string; phone?: string }
-): Promise<void> {
-  let token = await getUserToken();
+export interface SumUpReceiptData {
+  transactionCode?: string;
+  amount?: string;
+  currency?: string;
+  businessName?: string;
+  authorizationCode?: string;
+  cardLastFour?: string;
+  cardBrand?: string;
+  localTime?: string;
+}
 
-  const doSend = async (tok: string): Promise<{ status: number; body: string }> => {
-    const body: Record<string, string> = {};
-    if (contact.email) body.email = contact.email;
-    if (contact.phone) body.phone = contact.phone;
-    const res = await fetch(`${SUMUP_BASE}/v0.1/me/receipts/${transactionId}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return { status: res.status, body: await res.text() };
+/**
+ * Retrieve official SumUp receipt data for a transaction.
+ * Uses GET /v1.1/receipts/{id}?mid={merchantCode}
+ * @param transactionId - The SumUp transaction UUID or code
+ */
+export async function getSumUpReceiptData(transactionId: string): Promise<SumUpReceiptData> {
+  const token = await getSumUpToken();
+  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
+
+  const res = await fetch(
+    `${SUMUP_BASE}/v1.1/receipts/${encodeURIComponent(transactionId)}?mid=${encodeURIComponent(merchantCode)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (res.status === 404) {
+    throw new Error("Reçu SumUp introuvable pour cette transaction.");
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Erreur SumUp récupération reçu (${res.status}): ${body}`);
+  }
+
+  const data = await res.json() as {
+    transaction_data?: {
+      transaction_code?: string;
+      amount?: string;
+      currency?: string;
+      merchant_code?: string;
+      local_time?: string;
+    };
+    merchant_data?: {
+      merchant_profile?: {
+        business_name?: string;
+      };
+    };
+    acquirer_data?: {
+      authorization_code?: string;
+    };
+    emv_data?: {
+      card_last_4_digits?: string;
+      card_brand?: string;
+      last_4_digits?: string;
+    };
+    card?: {
+      last_4_digits?: string;
+      type?: string;
+    };
   };
 
-  let result = await doSend(token);
-
-  if (result.status === 401) {
-    process.env["SUMUP_USER_TOKEN"] = "";
-    try {
-      token = await refreshAndGetUserToken();
-      result = await doSend(token);
-    } catch {
-      throw new Error("Token SumUp expiré. Veuillez vous reconnecter via Paramètres.");
-    }
-  }
-
-  if (result.status === 404) {
-    throw new Error("Transaction introuvable. Vérifiez que la vente a bien été enregistrée.");
-  }
-
-  if (result.status < 200 || result.status >= 300) {
-    throw new Error(`Erreur SumUp envoi reçu (${result.status}): ${result.body}`);
-  }
+  return {
+    transactionCode: data.transaction_data?.transaction_code,
+    amount: data.transaction_data?.amount,
+    currency: data.transaction_data?.currency,
+    businessName: data.merchant_data?.merchant_profile?.business_name,
+    authorizationCode: data.acquirer_data?.authorization_code,
+    cardLastFour: data.emv_data?.card_last_4_digits ?? data.emv_data?.last_4_digits ?? data.card?.last_4_digits,
+    cardBrand: data.emv_data?.card_brand ?? data.card?.type,
+    localTime: data.transaction_data?.local_time,
+  };
 }
 
 /**

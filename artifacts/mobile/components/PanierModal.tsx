@@ -49,9 +49,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const [success, setSuccess] = useState(false);
   const [successMode, setSuccessMode] = useState<"cash" | "carte" | null>(null);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number; remise: number; commentaire: string } | null>(null);
-  const [receiptContact, setReceiptContact] = useState("");
-  const [receiptSending, setReceiptSending] = useState(false);
-  const [receiptStatus, setReceiptStatus] = useState<"idle" | "sent" | "error">("idle");
+  const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptError, setReceiptError] = useState("");
   const [remiseCentimes, setRemiseCentimes] = useState(0);
   const [remiseType, setRemiseType] = useState<"fixe" | "pct">("fixe");
@@ -467,64 +465,54 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                 <Feather name="share-2" size={16} color={COLORS.accent} />
                 <Text style={styles.shareBtnSuccessText}>Partager le ticket</Text>
               </Pressable>
-              {successMode === "carte" && (
-                <View style={styles.receiptBlock}>
-                  <Text style={styles.receiptTitle}>
-                    <Feather name="mail" size={13} color={COLORS.accent} />{"  "}Envoyer le reçu SumUp
+              {successMode === "carte" && saleReference && (
+                <Pressable
+                  style={[styles.shareBtnSuccess, { borderColor: "#5C8EFF", marginTop: 8, opacity: receiptLoading ? 0.6 : 1 }]}
+                  disabled={receiptLoading}
+                  onPress={async () => {
+                    if (!saleReference) return;
+                    setReceiptLoading(true);
+                    setReceiptError("");
+                    try {
+                      const receipt = await api.payments.getReceipt(saleReference);
+                      const now = receipt.localTime
+                        ? new Date(receipt.localTime).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+                        : new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+                      const amountStr = receipt.amount
+                        ? `${parseFloat(receipt.amount).toFixed(2).replace(".", ",")} ${receipt.currency ?? "EUR"}`
+                        : successSnapshot
+                        ? `${(successSnapshot.total / 100).toFixed(2).replace(".", ",")} EUR`
+                        : "";
+                      const lines: string[] = [
+                        `🏪 ${receipt.businessName ?? "LNT Paris"} — Reçu Officiel`,
+                        "────────────────────────",
+                      ];
+                      if (receipt.transactionCode) lines.push(`Code : ${receipt.transactionCode}`);
+                      lines.push(`Montant : €${amountStr}`);
+                      lines.push(`Mode : Carte Bancaire · SumUp`);
+                      if (receipt.cardBrand || receipt.cardLastFour) {
+                        lines.push(`Carte : ${receipt.cardBrand ?? ""}${receipt.cardLastFour ? ` •••• ${receipt.cardLastFour}` : ""}`);
+                      }
+                      if (receipt.authorizationCode) lines.push(`Autorisation : ${receipt.authorizationCode}`);
+                      lines.push(`Heure : ${now}`);
+                      lines.push("────────────────────────");
+                      lines.push("Merci !");
+                      Share.share({ message: lines.join("\n"), title: "Reçu SumUp" });
+                    } catch (e) {
+                      setReceiptError((e as Error).message ?? "Erreur récupération reçu");
+                    } finally {
+                      setReceiptLoading(false);
+                    }
+                  }}
+                >
+                  <Feather name="file-text" size={16} color="#5C8EFF" />
+                  <Text style={[styles.shareBtnSuccessText, { color: "#5C8EFF" }]}>
+                    {receiptLoading ? "Chargement…" : "Reçu officiel SumUp"}
                   </Text>
-                  {receiptStatus === "sent" ? (
-                    <View style={styles.receiptSentRow}>
-                      <Feather name="check-circle" size={15} color="#4CAF50" />
-                      <Text style={styles.receiptSentText}>Reçu envoyé !</Text>
-                    </View>
-                  ) : (
-                    <>
-                      <View style={styles.receiptInputRow}>
-                        <TextInput
-                          style={styles.receiptInput}
-                          placeholder="Email ou téléphone (+33…)"
-                          placeholderTextColor={COLORS.textSecondary}
-                          value={receiptContact}
-                          onChangeText={(v) => { setReceiptContact(v); setReceiptStatus("idle"); setReceiptError(""); }}
-                          keyboardType="email-address"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          editable={!receiptSending}
-                        />
-                        <Pressable
-                          style={[styles.receiptSendBtn, receiptSending && { opacity: 0.5 }]}
-                          disabled={receiptSending || !receiptContact.trim()}
-                          onPress={async () => {
-                            const contact = receiptContact.trim();
-                            if (!contact || !saleReference) return;
-                            setReceiptSending(true);
-                            setReceiptError("");
-                            try {
-                              const isPhone = contact.startsWith("+") || /^\d/.test(contact);
-                              await api.payments.sendReceipt({
-                                saleReference,
-                                ...(isPhone ? { phone: contact } : { email: contact }),
-                              });
-                              setReceiptStatus("sent");
-                            } catch (e) {
-                              setReceiptStatus("error");
-                              setReceiptError((e as Error).message ?? "Erreur envoi");
-                            } finally {
-                              setReceiptSending(false);
-                            }
-                          }}
-                        >
-                          {receiptSending
-                            ? <Feather name="loader" size={15} color="#fff" />
-                            : <Feather name="send" size={15} color="#fff" />}
-                        </Pressable>
-                      </View>
-                      {receiptStatus === "error" && (
-                        <Text style={styles.receiptErrorText}>{receiptError}</Text>
-                      )}
-                    </>
-                  )}
-                </View>
+                </Pressable>
+              )}
+              {!!receiptError && (
+                <Text style={[styles.receiptErrorText, { alignSelf: "center", marginTop: 4 }]}>{receiptError}</Text>
               )}
               <Pressable
                 style={[styles.shareBtnSuccess, { borderColor: COLORS.textSecondary, marginTop: 8 }]}
@@ -538,8 +526,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                   setRemiseCentimes(0);
                   setRemiseInput("");
                   setCommentaire("");
-                  setReceiptContact("");
-                  setReceiptStatus("idle");
+                  setReceiptLoading(false);
                   setReceiptError("");
                   onCartChange([]);
                   onClose();
