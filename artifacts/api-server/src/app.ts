@@ -56,6 +56,25 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ── SumUp OAuth routes — registered FIRST before /api router ───────────────
+// These MUST be before app.use("/api", router) to prevent the API router
+// from intercepting /api/auth/sumup before it can be matched here.
+const handleAuthSumup = (req: Request, res: Response) => {
+  const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
+  const REDIRECT_URI = "https://lntparis.replit.app/callback";
+  const scope = "payments transactions.history readers.read readers.write";
+  const url = new URL("https://api.sumup.com/authorize");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("redirect_uri", REDIRECT_URI);
+  url.searchParams.set("scope", scope);
+  res.redirect(url.toString());
+};
+
+// Register at all paths that may be used (with and without /api prefix)
+app.get("/auth/sumup", handleAuthSumup);
+app.get("/api/auth/sumup", handleAuthSumup);
+
 app.use("/api", router);
 
 // ── Mobile app routes ──────────────────────────────────────────────────────
@@ -96,27 +115,6 @@ app.get("/manifest", (req, res) => {
 if (fs.existsSync(MOBILE_STATIC_ROOT)) {
   app.use(express.static(MOBILE_STATIC_ROOT));
 }
-
-// ── Initiate SumUp OAuth with full scopes (including transactions.history) ──
-// Available at BOTH /auth/sumup and /api/auth/sumup (proxy routes /api/* to this server)
-const handleAuthSumup = (req: Request, res: Response) => {
-  const CLIENT_ID = process.env["SUMUP_CLIENT_ID"] ?? "";
-  // Use /callback (already registered in SumUp developer portal)
-  const REDIRECT_URI = "https://lntparis.replit.app/callback";
-  // "payments" scope is required for processing refunds via POST /v0.1/me/refund/{txnId}
-  const scope = "payments transactions.history readers.read readers.write";
-
-  // IMPORTANT: The correct OAuth URL is api.sumup.com/authorize (NOT auth.sumup.com/authorize — that returns 404)
-  // api.sumup.com/authorize → 302 → auth.sumup.com/flows/login → correct login page
-  const url = new URL("https://api.sumup.com/authorize");
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", CLIENT_ID);
-  url.searchParams.set("redirect_uri", REDIRECT_URI);
-  url.searchParams.set("scope", scope);
-
-  res.redirect(url.toString());
-};
-app.get("/auth/sumup", handleAuthSumup);
 
 const handleCallback = async (req: Request, res: Response) => {
   const { code, error, error_description } = req.query as Record<string, string>;
@@ -255,10 +253,8 @@ const handleCallback = async (req: Request, res: Response) => {
   }
 };
 
-// Register callback at BOTH paths (old SumUp app used /callback, new uses /api/callback)
+// Callback routes — registered at both paths for backward compatibility
 app.get("/callback", handleCallback);
 app.get("/api/callback", handleCallback);
-// Register auth/sumup at /api/auth/sumup (proxy routes /api/* to this server)
-app.get("/api/auth/sumup", handleAuthSumup);
 
 export default app;
