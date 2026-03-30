@@ -180,7 +180,7 @@ router.get("/status/:saleReference", async (req, res) => {
         );
         if (txn) {
           const s = txn.status.toUpperCase();
-          req.log.info({ saleReference, txnStatus: s, txnId: txn.transactionId }, "Transaction found in history fallback");
+          req.log.info({ saleReference, txnStatus: s, txnId: txn.transactionId }, "Transaction matched via direct lookup or history");
 
           // Anti-doublon: skip if this transaction ID is already linked to another checkout
           let alreadyUsed = false;

@@ -313,77 +313,88 @@ export async function getTransactionByClientId(
   currency?: string;
   raw?: unknown;
 } | null> {
-  // Collect tokens to try in order: user token first (required for /me/transactions),
-  // then client_credentials (usually won't work for this endpoint but try anyway)
-  const tokensToTry: string[] = [];
-  try { tokensToTry.push(await getUserToken()); } catch { /* ignore */ }
-  try { tokensToTry.push(await getSumUpToken()); } catch { /* ignore */ }
+  // Get user token (required — CC token does not have access to /me/transactions)
+  let userToken: string;
+  try { userToken = await getUserToken(); } catch { return null; }
 
-  if (tokensToTry.length === 0) return null;
+  // ── Strategy 0 (primary): direct lookup by client_transaction_id ──
+  // GET /v0.1/me/transactions?client_transaction_id={checkoutId}
+  // Returns the transaction IMMEDIATELY — no propagation delay, no pagination issues.
+  // The SumUp API sets client_transaction_id = the checkout UUID on terminal payments.
+  try {
+    const res = await fetch(
+      `${SUMUP_BASE}/v0.1/me/transactions?client_transaction_id=${encodeURIComponent(clientId)}`,
+      { headers: { Authorization: `Bearer ${userToken}` } },
+    );
+    if (res.status === 401) {
+      process.env["SUMUP_USER_TOKEN"] = "";
+      // Refresh and retry once
+      try {
+        userToken = await refreshAndGetUserToken();
+        const res2 = await fetch(
+          `${SUMUP_BASE}/v0.1/me/transactions?client_transaction_id=${encodeURIComponent(clientId)}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        if (res2.ok) {
+          const tx = await res2.json() as SumUpTransaction;
+          if (tx?.id) {
+            return { status: tx.status, transactionId: tx.id, amount: tx.amount, currency: tx.currency, raw: tx };
+          }
+        }
+      } catch { /* fall through to history */ }
+    } else if (res.ok) {
+      const tx = await res.json() as SumUpTransaction;
+      if (tx?.id) {
+        return { status: tx.status, transactionId: tx.id, amount: tx.amount, currency: tx.currency, raw: tx };
+      }
+    }
+    // 404 = transaction not yet created on SumUp side (payment still in progress) — fall through
+  } catch { /* fall through to history fallback */ }
+
+  // ── Strategy 1 (fallback): transaction history search ──
+  // Used when Strategy 0 returns 404 (payment not yet completed on SumUp side).
+  // Fetches recent history and matches by amount + POS + SUCCESSFUL.
+  if (amountEur === undefined) return null;
 
   let items: SumUpTransaction[] = [];
-  let lastError: string | null = null;
-
-  for (const tok of tokensToTry) {
+  try {
     const res = await fetch(
       `${SUMUP_BASE}/v0.1/me/transactions/history?limit=100&order=created_at.desc`,
-      { headers: { Authorization: `Bearer ${tok}` } },
+      { headers: { Authorization: `Bearer ${userToken}` } },
     );
+    if (res.status === 401) process.env["SUMUP_USER_TOKEN"] = "";
     if (res.ok) {
       const data = await res.json() as { items?: SumUpTransaction[] };
       items = data.items ?? [];
-      lastError = null;
-      break;
     }
-    if (res.status === 401) process.env["SUMUP_USER_TOKEN"] = "";
-    lastError = `SumUp transactions history error ${res.status}: ${await res.text()}`;
-  }
+  } catch { /* no history available */ }
 
-  if (lastError !== null) {
-    throw new Error(lastError);
-  }
-
-  // ── Strategy 1: exact client_transaction_id match ──
+  // Strategy 1a: exact client_transaction_id match in history
   const byId = items.find(
     (t) => t.client_transaction_id === clientId ||
-           // SumUp may truncate to 36 chars
            (clientId.length > 36 && t.client_transaction_id === clientId.slice(0, 36))
   );
   if (byId) {
     return { status: byId.status, transactionId: byId.id, amount: byId.amount, currency: byId.currency, raw: byId };
   }
 
-  // ── Strategy 2: most recent completed POS terminal transaction with matching amount ──
-  // Items are ordered most-recent-first by the API.
-  // When anchorTs is provided (ISO timestamp of last SumUp tx at checkout creation),
-  // only consider transactions NEWER than the anchor — this avoids matching old same-amount payments.
-  // When anchorTs is absent, accept any matching POS transaction (caller deduplicates via DB check).
-  if (amountEur !== undefined) {
-    const anchorTime = anchorTs ? new Date(anchorTs).getTime() : null;
-
-    const byAmount = items.find((t) => {
-      // Must be a terminal (POS) payment — not an online/ecom payment
-      if (t.payment_type && t.payment_type !== "POS") return false;
-      // Match amount within 1 cent tolerance
-      const txAmount = typeof t.amount === "number" ? t.amount : parseFloat(String(t.amount));
-      if (Math.abs(txAmount - amountEur) > 0.01) return false;
-      // Only SUCCESSFUL — FAILED/CANCELLED cannot validate a sale
-      const s = t.status?.toUpperCase();
-      if (s !== "SUCCESSFUL") return false;
-      // If we have an anchor, only accept transactions that came AFTER it
-      if (anchorTime !== null && t.timestamp) {
-        const txTime = new Date(t.timestamp).getTime();
-        if (txTime <= anchorTime) return false;
-      }
-      return true;
-    });
-
-    if (byAmount) {
-      return { status: byAmount.status, transactionId: byAmount.id, amount: byAmount.amount, currency: byAmount.currency, raw: byAmount };
+  // Strategy 1b: most recent SUCCESSFUL POS transaction with matching amount + anchor filter
+  const anchorTime = anchorTs ? new Date(anchorTs).getTime() : null;
+  const byAmount = items.find((t) => {
+    if (t.payment_type && t.payment_type !== "POS") return false;
+    const txAmount = typeof t.amount === "number" ? t.amount : parseFloat(String(t.amount));
+    if (Math.abs(txAmount - amountEur) > 0.01) return false;
+    if (t.status?.toUpperCase() !== "SUCCESSFUL") return false;
+    if (anchorTime !== null && t.timestamp) {
+      if (new Date(t.timestamp).getTime() <= anchorTime) return false;
     }
+    return true;
+  });
+
+  if (byAmount) {
+    return { status: byAmount.status, transactionId: byAmount.id, amount: byAmount.amount, currency: byAmount.currency, raw: byAmount };
   }
 
-  // Nothing found yet
   return null;
 }
 
