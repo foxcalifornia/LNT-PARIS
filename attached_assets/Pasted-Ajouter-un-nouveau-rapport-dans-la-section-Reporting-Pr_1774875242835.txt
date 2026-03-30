@@ -1,0 +1,105 @@
+Ajouter un nouveau rapport dans la section Reporting : “Produits les plus vendus par jour de semaine”.
+
+Objectif :
+Permettre d’analyser quels produits se vendent le mieux selon le jour de la semaine (lundi, mardi, mercredi, etc.). Cela permettra de mieux comprendre les habitudes d’achat des clients.
+
+1. Nouvelle section dans Reporting
+
+Créer une section appelée :
+
+“Produits les plus vendus par jour de semaine”
+
+Cette section doit analyser toutes les ventes enregistrées dans la base de données.
+
+2. Calcul des données
+
+Pour chaque vente enregistrée :
+- récupérer la date de la vente
+- déterminer le jour de la semaine correspondant :
+  - Lundi
+  - Mardi
+  - Mercredi
+  - Jeudi
+  - Vendredi
+  - Samedi
+  - Dimanche
+
+Ensuite :
+- compter le nombre de fois où chaque produit a été vendu
+- regrouper ces ventes par jour de la semaine
+
+3. Résultat attendu
+
+Pour chaque jour de la semaine, afficher les produits les plus vendus.
+
+Exemple :
+
+Lundi
+1. Santorini Bleu — 12 ventes
+2. Cancun Marron Rose — 9 ventes
+3. Dubai Noir — 7 ventes
+
+Mardi
+1. Santorini Rouge — 10 ventes
+2. Cancun Transparent — 8 ventes
+3. Florence Bleu — 6 ventes
+
+Mercredi
+...
+
+4. Interface utilisateur
+
+La page doit être simple à lire.
+
+Afficher :
+- un tableau ou une carte par jour de la semaine
+- les 3 à 5 produits les plus vendus pour ce jour
+
+Structure :
+
+Lundi
+Produit | Quantité vendue
+
+Mardi
+Produit | Quantité vendue
+
+Mercredi
+...
+
+5. Filtre optionnel
+
+Ajouter un filtre de période :
+
+- 7 derniers jours
+- 30 derniers jours
+- 90 derniers jours
+- toute la période
+
+Le rapport doit se recalculer automatiquement selon la période choisie.
+
+6. Données nécessaires
+
+Utiliser les tables existantes des ventes :
+
+sales
+- id
+- date
+- payment_status
+
+sale_items
+- sale_id
+- product_id
+- quantity
+
+products
+- id
+- name
+- collection
+
+7. Objectif final
+
+Permettre au propriétaire du magasin de voir rapidement :
+
+- quels produits se vendent le mieux
+- quels produits fonctionnent mieux certains jours
+- adapter les promotions et le réassort en fonction des jours de la semaine.

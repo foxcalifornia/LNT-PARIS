@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
-import { api, formatPrix, formatDateLabel, type JourReport, type Session, type CollectionWithProduits } from "@/lib/api";
+import { api, formatPrix, formatDateLabel, type JourReport, type Session, type CollectionWithProduits, type WeekdayReport } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
@@ -23,7 +23,8 @@ const CARD_COLOR = "#3B82F6";
 const GOLD = COLORS.accent;
 
 type Filter = "today" | "week" | "all";
-type Tab = "resume" | "ouvertures" | "ventes" | "stock" | "reappro";
+type WeekdayFilter = "7" | "30" | "90" | "all";
+type Tab = "resume" | "ouvertures" | "ventes" | "stock" | "reappro" | "habitudes";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "resume", label: "Résumé", icon: "pie-chart" },
@@ -31,6 +32,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "ventes", label: "Ventes", icon: "trending-up" },
   { key: "stock", label: "Stock", icon: "package" },
   { key: "reappro", label: "Réappro", icon: "alert-circle" },
+  { key: "habitudes", label: "Habitudes", icon: "calendar" },
 ];
 
 function parsePunctuality(heure: string): { tardMinutes: number; onTime: boolean } {
@@ -46,6 +48,7 @@ export default function ReportingScreen() {
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState<Tab>("resume");
   const [filter, setFilter] = useState<Filter>("all");
+  const [weekdayFilter, setWeekdayFilter] = useState<WeekdayFilter>("30");
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,6 +70,12 @@ export default function ReportingScreen() {
   const { data: collections = [], isLoading: collectionsLoading } = useQuery({
     queryKey: ["collections"],
     queryFn: api.inventory.getCollections,
+  });
+
+  const weekdayDaysParam = weekdayFilter === "all" ? undefined : Number(weekdayFilter);
+  const { data: weekdayData = [], isLoading: weekdayLoading } = useQuery({
+    queryKey: ["reporting-by-weekday", weekdayFilter],
+    queryFn: () => api.reporting.getByWeekday(weekdayDaysParam),
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -95,6 +104,7 @@ export default function ReportingScreen() {
   };
 
   const showFilter = tab === "resume" || tab === "ventes";
+  const showWeekdayFilter = tab === "habitudes";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -118,6 +128,22 @@ export default function ReportingScreen() {
             >
               <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
                 {f === "today" ? "Aujourd'hui" : f === "week" ? "7 jours" : "Tout"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {showWeekdayFilter && (
+        <View style={styles.filterRow}>
+          {([["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["all", "Tout"]] as [WeekdayFilter, string][]).map(([f, label]) => (
+            <Pressable
+              key={f}
+              style={[styles.filterChip, weekdayFilter === f && styles.filterChipActive]}
+              onPress={() => { Haptics.selectionAsync(); setWeekdayFilter(f); }}
+            >
+              <Text style={[styles.filterChipText, weekdayFilter === f && styles.filterChipTextActive]}>
+                {label}
               </Text>
             </Pressable>
           ))}
@@ -157,6 +183,14 @@ export default function ReportingScreen() {
         {tab === "reappro" && (
           <ReapproTab collections={collections} isLoading={collectionsLoading} insets={insets} />
         )}
+        {tab === "habitudes" && (
+          <ByWeekdayTab
+            data={weekdayData}
+            isLoading={weekdayLoading}
+            weekdayFilter={weekdayFilter}
+            insets={insets}
+          />
+        )}
       </View>
 
       <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -178,6 +212,81 @@ export default function ReportingScreen() {
         ))}
       </View>
     </View>
+  );
+}
+
+function ByWeekdayTab({
+  data,
+  isLoading,
+  weekdayFilter,
+  insets,
+}: {
+  data: WeekdayReport[];
+  isLoading: boolean;
+  weekdayFilter: WeekdayFilter;
+  insets: { bottom: number };
+}) {
+  if (isLoading) return <LoadingView />;
+  if (data.length === 0) return (
+    <EmptyView
+      icon="calendar"
+      title="Pas encore de données"
+      subtitle={
+        weekdayFilter === "7" ? "Aucune vente ces 7 derniers jours"
+        : weekdayFilter === "30" ? "Aucune vente ces 30 derniers jours"
+        : weekdayFilter === "90" ? "Aucune vente ces 90 derniers jours"
+        : "Aucune vente enregistrée"
+      }
+    />
+  );
+
+  const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" };
+
+  return (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 16, paddingHorizontal: 16, paddingTop: 16, gap: 12 }}
+    >
+      <View style={styles.weekdayHeader}>
+        <Feather name="bar-chart-2" size={14} color={GOLD} />
+        <Text style={styles.weekdayHeaderText}>
+          Top 5 produits par jour de semaine
+        </Text>
+      </View>
+
+      {data.map((day) => (
+        <View key={day.dayIndex} style={styles.weekdayCard}>
+          <View style={styles.weekdayCardHeader}>
+            <View style={styles.weekdayDayBadge}>
+              <Text style={styles.weekdayDayText}>{day.dayName}</Text>
+            </View>
+            <Text style={styles.weekdayTotalText}>
+              {day.topProduits.reduce((s, p) => s + p.quantite, 0)} ventes
+            </Text>
+          </View>
+
+          <View style={styles.weekdayTableHeader}>
+            <Text style={[styles.weekdayTableHeaderText, { flex: 1 }]}>Produit</Text>
+            <Text style={styles.weekdayTableHeaderText}>Qté</Text>
+          </View>
+
+          {day.topProduits.map((p, idx) => (
+            <View key={idx} style={[styles.weekdayRow, idx < day.topProduits.length - 1 && styles.weekdayRowBorder]}>
+              <View style={styles.weekdayRowLeft}>
+                <Text style={styles.weekdayRank}>{MEDAL[idx] ?? `${idx + 1}.`}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.weekdayCollection}>{p.collection}</Text>
+                  <Text style={styles.weekdayCouleur} numberOfLines={1}>{p.couleur}</Text>
+                </View>
+              </View>
+              <View style={styles.weekdayQtyBadge}>
+                <Text style={styles.weekdayQtyText}>{p.quantite}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -977,5 +1086,46 @@ const styles = StyleSheet.create({
   reapproStat: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 4 },
   reapproStatDiv: { width: 1, backgroundColor: COLORS.border, marginVertical: 8 },
   reapproStatLabel: { fontSize: 10, fontFamily: "Inter_400Regular", color: COLORS.textSecondary },
+
+  weekdayHeader: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 4, paddingBottom: 4,
+  },
+  weekdayHeaderText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
+  weekdayCard: {
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 1, borderColor: COLORS.border, overflow: "hidden",
+  },
+  weekdayCardHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: COLORS.background,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  weekdayDayBadge: {
+    backgroundColor: GOLD + "22", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20,
+  },
+  weekdayDayText: { fontSize: 14, fontFamily: "Inter_700Bold", color: GOLD },
+  weekdayTotalText: { fontSize: 13, fontFamily: "Inter_500Medium", color: COLORS.textSecondary },
+  weekdayTableHeader: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: COLORS.background + "88",
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
+  },
+  weekdayTableHeaderText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: 0.3 },
+  weekdayRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  weekdayRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  weekdayRowLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  weekdayRank: { fontSize: 16, width: 26, textAlign: "center" },
+  weekdayCollection: { fontSize: 11, fontFamily: "Inter_500Medium", color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: 0.3 },
+  weekdayCouleur: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: COLORS.text, textTransform: "capitalize" },
+  weekdayQtyBadge: {
+    backgroundColor: GOLD + "22", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, minWidth: 40, alignItems: "center",
+  },
+  weekdayQtyText: { fontSize: 14, fontFamily: "Inter_700Bold", color: GOLD },
   reapproStatValue: { fontSize: 18, fontFamily: "Inter_700Bold", color: COLORS.text },
 });

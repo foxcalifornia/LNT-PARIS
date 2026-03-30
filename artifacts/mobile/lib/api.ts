@@ -76,6 +76,18 @@ export type JourReport = {
   articlesParJour: LigneVente[];
 };
 
+export type WeekdayProduit = {
+  collection: string;
+  couleur: string;
+  quantite: number;
+};
+
+export type WeekdayReport = {
+  dayIndex: number;
+  dayName: string;
+  topProduits: WeekdayProduit[];
+};
+
 export type VenteTransaction = {
   heure: string;
   typePaiement: "CASH" | "CARTE";
@@ -228,6 +240,8 @@ export const api = {
   },
   reporting: {
     getDaily: () => request<JourReport[]>("/reporting/daily"),
+    getByWeekday: (days?: number) =>
+      request<WeekdayReport[]>(`/reporting/by-weekday${days ? `?days=${days}` : ""}`),
   },
   payments: {
     create: (data: {

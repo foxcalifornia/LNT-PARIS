@@ -10,7 +10,7 @@ import {
   insertVenteSchema,
   boitesTable,
 } from "@workspace/db/schema";
-import { eq, desc, gte } from "drizzle-orm";
+import { eq, desc, gte, and } from "drizzle-orm";
 import { decrementerConsommables } from "../lib/consommables";
 
 const router: IRouter = Router();
@@ -477,6 +477,57 @@ router.get("/reporting/daily", async (req, res) => {
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Erreur reporting" });
+  }
+});
+
+router.get("/reporting/by-weekday", async (req, res) => {
+  try {
+    const { days } = req.query;
+    const daysNum = days ? parseInt(String(days), 10) : null;
+    const since = daysNum ? new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000) : null;
+
+    const conditions = [eq(ventesTable.cancelled, false)];
+    if (since) conditions.push(gte(ventesTable.createdAt, since));
+
+    const ventes = await db
+      .select({
+        quantiteVendue: ventesTable.quantiteVendue,
+        createdAt: ventesTable.createdAt,
+        couleur: produitsTable.couleur,
+        collectionNom: collectionsTable.nom,
+      })
+      .from(ventesTable)
+      .innerJoin(produitsTable, eq(ventesTable.produitId, produitsTable.id))
+      .innerJoin(collectionsTable, eq(produitsTable.collectionId, collectionsTable.id))
+      .where(and(...conditions));
+
+    const DAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+    const weekdayMap = new Map<number, Map<string, { collection: string; couleur: string; quantite: number }>>();
+
+    for (const v of ventes) {
+      const dayIdx = v.createdAt.getDay();
+      if (!weekdayMap.has(dayIdx)) weekdayMap.set(dayIdx, new Map());
+      const productMap = weekdayMap.get(dayIdx)!;
+      const key = `${v.collectionNom}|||${v.couleur}`;
+      if (!productMap.has(key)) productMap.set(key, { collection: v.collectionNom, couleur: v.couleur, quantite: 0 });
+      productMap.get(key)!.quantite += v.quantiteVendue;
+    }
+
+    const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+    const result = WEEKDAY_ORDER
+      .filter((dayIdx) => weekdayMap.has(dayIdx))
+      .map((dayIdx) => ({
+        dayIndex: dayIdx,
+        dayName: DAYS[dayIdx],
+        topProduits: Array.from(weekdayMap.get(dayIdx)!.values())
+          .sort((a, b) => b.quantite - a.quantite)
+          .slice(0, 5),
+      }));
+
+    res.json(result);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur reporting par jour de semaine" });
   }
 });
 
