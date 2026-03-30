@@ -476,11 +476,12 @@ function AdminConsultView({
     queryFn: api.caisse.getVentesJour,
   });
 
-  const nbVentes = ventesJour?.transactions?.length ?? 0;
-  const totalCA = ventesJour?.transactions?.reduce(
+  const activeVentes = ventesJour?.transactions?.filter((t) => !t.cancelled) ?? [];
+  const nbVentes = activeVentes.length;
+  const totalCA = activeVentes.reduce(
     (s, t) => s + t.articles.reduce((ss, a) => ss + a.montantCentimes, 0),
-    0
-  ) ?? 0;
+    0,
+  );
 
   const dateLabel = getTodayLabel();
 
@@ -640,12 +641,13 @@ function ActiveCaisseView({
     refetchInterval: 15000,
   });
 
-  const nbVentes = ventesJour?.transactions?.length ?? 0;
-  const dernièreVente = ventesJour?.transactions?.[0] ?? null;
-  const pairesVendues = ventesJour?.transactions?.reduce(
+  const activeTransactions = ventesJour?.transactions?.filter((t) => !t.cancelled) ?? [];
+  const nbVentes = activeTransactions.length;
+  const dernièreVente = activeTransactions[0] ?? null;
+  const pairesVendues = activeTransactions.reduce(
     (total, t) => total + t.articles.reduce((s, a) => s + a.quantiteVendue, 0),
-    0
-  ) ?? 0;
+    0,
+  );
 
   const duration = session ? getSessionDuration(session.heure, now) : null;
 
@@ -806,12 +808,13 @@ function ActiveCaisseView({
           ) : (
             ventesJour.transactions.map((t, i) => {
               const isCash = t.typePaiement === "CASH";
-              const color = isCash ? COLORS.cash : COLORS.card_payment;
+              const isCancelled = t.cancelled ?? false;
+              const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : COLORS.card_payment);
               return (
-                <View key={i} style={styles.txJourRow}>
+                <View key={t.groupKey ?? i} style={[styles.txJourRow, isCancelled && { opacity: 0.55 }]}>
                   <Text style={styles.txJourHeure}>{t.heure}</Text>
                   <Text style={styles.txJourSep}>—</Text>
-                  <Text style={[styles.txJourMontant, { color: t.refunded ? COLORS.textSecondary : color, textDecorationLine: t.refunded ? "line-through" : "none" }]}>
+                  <Text style={[styles.txJourMontant, { color, textDecorationLine: isCancelled ? "line-through" : "none" }]}>
                     {formatPrix(t.montantCentimes)}
                   </Text>
                   <Text style={styles.txJourSep}>—</Text>
@@ -825,16 +828,15 @@ function ActiveCaisseView({
                       {isCash ? "Cash" : "Carte"}
                     </Text>
                   </View>
-                  {!isCash && t.sumupTransactionId && (
-                    <Text style={styles.txJourTxId}>
-                      #{t.sumupTransactionId.slice(-8).toUpperCase()}
-                    </Text>
-                  )}
-                  {t.refunded && (
+                  {isCancelled ? (
+                    <View style={styles.txJourRefunded}>
+                      <Text style={styles.txJourRefundedText}>ANN</Text>
+                    </View>
+                  ) : t.refunded ? (
                     <View style={styles.txJourRefunded}>
                       <Text style={styles.txJourRefundedText}>RMB</Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               );
             })

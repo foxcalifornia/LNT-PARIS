@@ -57,7 +57,7 @@ export default function VentesJourScreen() {
       ) : (
         <FlatList
           data={transactions}
-          keyExtractor={(_, i) => String(i)}
+          keyExtractor={(item) => item.groupKey}
           renderItem={({ item }) => <TransactionCard transaction={item} />}
           ListHeaderComponent={
             <SummaryHeader
@@ -140,10 +140,18 @@ function SummaryCard({
 
 function TransactionCard({ transaction: t }: { transaction: VenteTransaction }) {
   const isCash = t.typePaiement === "CASH";
-  const color = isCash ? COLORS.cash : COLORS.card_payment;
+  const isCancelled = t.cancelled ?? false;
+  const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : COLORS.card_payment);
 
   return (
-    <View style={styles.txCard}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.txCard,
+        isCancelled && styles.txCardCancelled,
+        pressed && { opacity: 0.75 },
+      ]}
+      onPress={() => router.push({ pathname: "/caisse/transaction-detail", params: { venteId: t.firstVenteId } })}
+    >
       <View style={styles.txHeader}>
         <View style={styles.txHeaderLeft}>
           <View style={[styles.txModeBadge, { backgroundColor: color + "18" }]}>
@@ -157,18 +165,27 @@ function TransactionCard({ transaction: t }: { transaction: VenteTransaction }) 
             </Text>
           </View>
           <Text style={styles.txHeure}>{t.heure}</Text>
-          {!isCash && t.sumupTransactionId && (
+          {!isCash && t.sumupTransactionId && !isCancelled && (
             <Text style={styles.txTxId}>
               #{t.sumupTransactionId.slice(-8).toUpperCase()}
             </Text>
           )}
-          {t.refunded && (
+          {isCancelled ? (
+            <View style={styles.txCancelledBadge}>
+              <Text style={styles.txCancelledText}>Annulé</Text>
+            </View>
+          ) : t.refunded ? (
             <View style={styles.txRefundedBadge}>
               <Text style={styles.txRefundedText}>Remboursé</Text>
             </View>
-          )}
+          ) : null}
         </View>
-        <Text style={[styles.txMontant, { color: t.refunded ? COLORS.textSecondary : color, textDecorationLine: t.refunded ? "line-through" : "none" }]}>{formatPrix(t.montantCentimes)}</Text>
+        <View style={styles.txMontantCol}>
+          <Text style={[styles.txMontant, { color, textDecorationLine: isCancelled ? "line-through" : "none" }]}>
+            {formatPrix(t.montantCentimes)}
+          </Text>
+          <Feather name="chevron-right" size={16} color={COLORS.border} />
+        </View>
       </View>
 
       {t.articles.length > 0 && (
@@ -176,16 +193,18 @@ function TransactionCard({ transaction: t }: { transaction: VenteTransaction }) 
           {t.articles.map((a, i) => (
             <View key={i} style={styles.txArticleRow}>
               <View style={styles.txArticleDot} />
-              <Text style={styles.txArticleText} numberOfLines={1}>
+              <Text style={[styles.txArticleText, isCancelled && { color: COLORS.textSecondary + "80" }]} numberOfLines={1}>
                 {a.quantiteVendue > 1 ? `${a.quantiteVendue}× ` : ""}
                 {a.collectionNom} – {a.couleur}
               </Text>
-              <Text style={styles.txArticlePrice}>{formatPrix(a.montantCentimes)}</Text>
+              <Text style={[styles.txArticlePrice, isCancelled && { color: COLORS.textSecondary, textDecorationLine: "line-through" }]}>
+                {formatPrix(a.montantCentimes)}
+              </Text>
             </View>
           ))}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -374,6 +393,16 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     letterSpacing: 0.3,
   },
+  txCardCancelled: {
+    opacity: 0.6,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+  },
+  txMontantCol: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   txRefundedBadge: {
     backgroundColor: COLORS.danger + "15",
     borderRadius: 6,
@@ -384,6 +413,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_700Bold",
     color: COLORS.danger,
+    letterSpacing: 0.5,
+  },
+  txCancelledBadge: {
+    backgroundColor: COLORS.textSecondary + "18",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  txCancelledText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.textSecondary,
     letterSpacing: 0.5,
   },
   txArticles: {

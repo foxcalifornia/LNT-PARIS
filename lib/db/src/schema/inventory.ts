@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,6 +28,8 @@ export const ventesTable = pgTable("ventes", {
   montantCentimes: integer("montant_centimes").notNull().default(0),
   sessionId: integer("session_id").references(() => collectionsTable.id),
   saleReference: text("sale_reference"),
+  cancelled: boolean("cancelled").notNull().default(false),
+  cancelledAt: timestamp("cancelled_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

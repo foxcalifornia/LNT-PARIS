@@ -82,7 +82,14 @@ export type VenteTransaction = {
   montantCentimes: number;
   sumupTransactionId?: string | null;
   refunded?: boolean;
+  cancelled?: boolean;
+  cancelledAt?: string | null;
+  saleReference?: string | null;
+  groupKey: string;
+  firstVenteId: number;
+  venteIds: number[];
   articles: {
+    produitId: number;
     couleur: string;
     collectionNom: string;
     quantiteVendue: number;
@@ -146,6 +153,11 @@ export const api = {
     getVentesJour: () => request<VentesJour>("/caisse/today"),
     cancelLastVente: () =>
       request<{ cancelled: number; message: string; refund?: { success: boolean; refundId?: string; error?: string } | null }>("/caisse/ventes/last", { method: "DELETE" }),
+    cancelVente: (venteId: number) =>
+      request<{ cancelled: number; message: string; refund?: { success: boolean; refundId?: string; error?: string; noRefundNeeded?: boolean } | null }>("/caisse/ventes/cancel", {
+        method: "POST",
+        body: JSON.stringify({ venteId }),
+      }),
   },
   inventory: {
     getCollections: () => request<CollectionWithProduits[]>("/collections"),
