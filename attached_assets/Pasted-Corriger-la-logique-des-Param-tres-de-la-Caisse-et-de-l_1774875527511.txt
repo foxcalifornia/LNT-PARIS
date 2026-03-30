@@ -1,0 +1,177 @@
+Corriger la logique des Paramètres, de la Caisse et de l’Inventaire pour que tous les réglages Admin soient réellement pris en compte dans l’application.
+
+Objectif :
+Faire en sorte que les paramètres modifiés par l’Admin soient bien enregistrés en base de données et réellement appliqués dans l’application, sans décalage entre l’UI, la base et le comportement réel.
+
+1. Corriger les horaires d’ouverture de caisse
+
+Problème actuel :
+- Dans les Paramètres, je peux modifier les horaires d’ouverture de la caisse
+- mais l’application continue à utiliser 10h00 / 20h00
+- cela signifie que la logique actuelle ne lit pas correctement les valeurs enregistrées dans les Paramètres
+
+Correction demandée :
+- utiliser uniquement les horaires enregistrés dans les Paramètres
+- ne plus utiliser 10h00 / 20h00 en dur dans le code
+- lorsque l’Admin modifie les horaires, enregistrer les nouvelles valeurs en base de données
+- à chaque vérification d’ouverture/fermeture de caisse, lire les horaires depuis la base de données ou depuis une configuration synchronisée
+
+Comportement attendu :
+- si l’Admin définit par exemple 09h30 / 19h00
+- alors la caisse doit respecter 09h30 / 19h00
+- l’ouverture vendeur et la fermeture automatique doivent utiliser ces nouvelles valeurs
+
+À vérifier :
+- sauvegarde en base
+- lecture des paramètres au chargement de la caisse
+- suppression de toute valeur codée en dur
+- rafraîchissement correct après mise à jour
+
+2. Ajouter la possibilité de modifier le prix d’un article depuis l’inventaire Admin
+
+Ajouter dans la fiche produit côté Admin :
+- un champ “Prix”
+- la possibilité de modifier ce prix
+- un bouton “Enregistrer”
+
+Comportement attendu :
+- le nouveau prix est enregistré en base de données
+- le nouveau prix est immédiatement pris en compte dans la caisse lors des prochaines ventes
+- afficher un message de confirmation après sauvegarde
+
+3. Réorganiser l’UI de la gestion des mots de passe
+
+Problème actuel :
+- la modification des mots de passe est trop visible directement dans la page Paramètres
+
+Nouvelle UX demandée :
+Dans la page Paramètres, afficher uniquement une entrée :
+
+- Gestion des accès
+
+Quand on clique sur “Gestion des accès”, ouvrir une sous-page ou un écran dédié.
+
+Dans cette sous-page, permettre :
+- modifier le mot de passe Admin
+- modifier le mot de passe Vendeur
+
+Interface attendue :
+- section mot de passe Admin
+  - nouveau mot de passe
+  - confirmer le mot de passe
+  - enregistrer
+- section mot de passe Vendeur
+  - nouveau mot de passe
+  - confirmer le mot de passe
+  - enregistrer
+
+4. Corriger l’activation / désactivation des promotions
+
+Problème actuel :
+- dans les Paramètres, quand je désactive la promotion “Promo 2+1 · 1 paire offerte”
+- elle s’affiche toujours pendant la vente
+- donc le réglage UI ne se reflète pas dans la logique métier
+
+Correction demandée :
+- quand la promotion est désactivée dans les Paramètres :
+  - ne plus l’afficher dans la caisse
+  - ne plus l’appliquer au panier
+  - ne plus l’utiliser dans les calculs de total
+- quand elle est activée :
+  - l’afficher
+  - l’appliquer normalement
+
+À vérifier :
+- lecture du paramètre promotion au chargement de la caisse
+- recalcul du panier en fonction de l’état actif/inactif
+- suppression de toute logique promo codée en dur
+
+5. Corriger l’activation / désactivation du paiement carte bancaire
+
+Problème actuel :
+- dans les Paramètres, même si “Paiement par carte bancaire” est désactivé
+- on peut toujours vendre avec la carte dans la caisse
+
+Correction demandée :
+- si le paiement carte est désactivé :
+  - ne pas afficher l’option de paiement carte dans le flux de vente
+  - empêcher toute confirmation de vente par carte côté frontend
+  - empêcher aussi côté backend toute vente carte si ce paramètre est désactivé
+- si le paiement carte est activé :
+  - afficher et autoriser normalement le paiement carte
+
+Important :
+- ne pas se contenter de masquer le bouton dans l’interface
+- ajouter aussi une validation backend
+
+6. Permettre de modifier l’ID du terminal de paiement depuis les Paramètres
+
+Ajouter dans les Paramètres > Paiements :
+- un champ modifiable pour l’ID du terminal de paiement
+- un bouton “Enregistrer”
+
+Comportement attendu :
+- l’ID du terminal est enregistré en base de données
+- l’application utilise cet ID pour les appels de paiement
+- toute transaction carte doit utiliser l’ID de terminal actuellement enregistré dans les Paramètres
+- si l’ID change, les nouveaux paiements doivent utiliser la nouvelle valeur immédiatement
+
+7. Identifier la vraie source de configuration SumUp / terminal
+
+Je veux un audit clair de l’intégration actuelle.
+
+Merci de vérifier dans le code et dans la base de données :
+- quel champ est actuellement utilisé pour identifier le terminal de paiement
+- dans quelle table ce champ est stocké
+- si l’application lit réellement ce champ ou utilise encore une valeur codée en dur / variable d’environnement
+- si le champ “Statut SumUp : Non configuré” est encore utilisé dans la logique applicative
+- si ce statut est purement visuel ou s’il bloque / influence encore les paiements
+- si ce statut doit être conservé, corrigé ou supprimé
+
+Je veux une réponse claire dans le code / commentaire / logs sur :
+- le nom exact de la table utilisée
+- le nom exact de la colonne utilisée
+- la valeur utilisée actuellement pour identifier le terminal
+- l’endroit du code où cette valeur est lue
+- si “Statut SumUp Non configuré” est encore branché ou non
+
+8. Synchronisation UI / base / logique métier
+
+Je veux que tous les paramètres suivants soient réellement synchronisés :
+
+- horaires de caisse
+- activation des promotions
+- activation du paiement carte
+- ID du terminal de paiement
+- mots de passe
+- prix produits
+
+Règle obligatoire :
+quand un paramètre est modifié dans l’UI Admin :
+- il doit être sauvegardé en base
+- il doit être relu par l’application
+- il doit modifier le comportement réel
+- il ne doit pas rester uniquement visuel
+
+9. Vérifications techniques à faire
+
+Merci de vérifier et corriger :
+- les appels save/update dans la base
+- les requêtes de lecture des paramètres
+- les valeurs fallback hardcodées
+- les caches locaux / états React non rafraîchis
+- les hooks / stores / context qui gardent d’anciennes valeurs
+- les validations backend manquantes
+- les composants de caisse qui ne relisent pas les paramètres à jour
+
+10. Résultat final attendu
+
+Je veux que :
+- les horaires modifiés dans Paramètres soient réellement utilisés par la caisse
+- le prix d’un article puisse être modifié depuis l’inventaire Admin
+- les mots de passe soient gérés dans une sous-page “Gestion des accès”
+- une promo désactivée disparaisse réellement de la caisse
+- le paiement carte désactivé soit vraiment impossible
+- l’ID terminal soit modifiable et utilisé réellement
+- le code me dise clairement quelle configuration SumUp est encore utilisée
+- “Statut SumUp Non configuré” soit soit connecté à une vraie logique, soit supprimé si inutile

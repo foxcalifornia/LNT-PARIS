@@ -16,6 +16,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { api, formatPrix, formatDateLabel, type JourReport, type Session, type CollectionWithProduits, type WeekdayReport } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
 
 const COLORS = Colors.light;
 const CASH_COLOR = "#10B981";
@@ -35,10 +36,10 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "habitudes", label: "Habitudes", icon: "calendar" },
 ];
 
-function parsePunctuality(heure: string): { tardMinutes: number; onTime: boolean } {
+function parsePunctuality(heure: string, openHour: number): { tardMinutes: number; onTime: boolean } {
   const [h, m] = heure.split(":").map(Number);
   const minutesFromOpen = h * 60 + m;
-  const expected = 10 * 60;
+  const expected = openHour * 60;
   const tardMinutes = minutesFromOpen - expected;
   return { tardMinutes: Math.max(0, tardMinutes), onTime: tardMinutes <= 0 };
 }
@@ -46,6 +47,7 @@ function parsePunctuality(heure: string): { tardMinutes: number; onTime: boolean
 export default function ReportingScreen() {
   const insets = useSafeAreaInsets();
   const { isAdmin } = useAuth();
+  const { openHour } = useSettings();
   const [tab, setTab] = useState<Tab>("resume");
   const [filter, setFilter] = useState<Filter>("all");
   const [weekdayFilter, setWeekdayFilter] = useState<WeekdayFilter>("30");
@@ -165,7 +167,7 @@ export default function ReportingScreen() {
           />
         )}
         {tab === "ouvertures" && (
-          <OuverturesTab sessions={sessions} isLoading={sessionsLoading} insets={insets} />
+          <OuverturesTab sessions={sessions} isLoading={sessionsLoading} insets={insets} openHour={openHour} />
         )}
         {tab === "ventes" && (
           <VentesTab
@@ -375,17 +377,19 @@ function OuverturesTab({
   sessions,
   isLoading,
   insets,
+  openHour,
 }: {
   sessions: Session[];
   isLoading: boolean;
   insets: { bottom: number };
+  openHour: number;
 }) {
   if (isLoading) return <LoadingView />;
   if (sessions.length === 0) return (
     <EmptyView icon="unlock" title="Aucune ouverture" subtitle="Aucune session de caisse enregistrée" />
   );
 
-  const onTime = sessions.filter((s) => parsePunctuality(s.heure).onTime).length;
+  const onTime = sessions.filter((s) => parsePunctuality(s.heure, openHour).onTime).length;
   const late = sessions.length - onTime;
 
   return (
@@ -414,7 +418,7 @@ function OuverturesTab({
       <Text style={styles.sectionTitle}>Historique des ouvertures</Text>
 
       {sessions.map((s) => {
-        const { tardMinutes, onTime } = parsePunctuality(s.heure);
+        const { tardMinutes, onTime } = parsePunctuality(s.heure, openHour);
         return (
           <View key={s.id} style={styles.sessionCard}>
             <View style={styles.sessionCardLeft}>

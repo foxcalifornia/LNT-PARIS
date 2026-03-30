@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
 import { api } from "@/lib/api";
 
 const COLORS = Colors.light;
@@ -33,11 +34,13 @@ type Settings = {
   shop_name: string;
   shop_address: string;
   currency: string;
+  sumup_reader_id: string;
 };
 
 export default function ParametresScreen() {
   const insets = useSafeAreaInsets();
   const { isAdmin } = useAuth();
+  const settingsCtx = useSettings();
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,7 @@ export default function ParametresScreen() {
         shop_name: data.shop_name ?? "LNT Paris",
         shop_address: data.shop_address ?? "",
         currency: data.currency ?? "EUR",
+        sumup_reader_id: data.sumup_reader_id ?? "",
       });
     } catch {
       Alert.alert("Erreur", "Impossible de charger les paramètres");
@@ -76,6 +80,7 @@ export default function ParametresScreen() {
     try {
       await api.settings.update(updates as Record<string, string>);
       setSettings((prev) => prev ? { ...prev, ...updates } : prev);
+      await settingsCtx.refetch();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Enregistré", "Paramètres mis à jour avec succès.");
     } catch {
@@ -111,7 +116,12 @@ export default function ParametresScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <SectionPasswords saving={saving} />
+          <NavRow
+            icon="lock"
+            title="Gestion des accès"
+            subtitle="Modifier les mots de passe de connexion"
+            onPress={() => router.push("/parametres/acces")}
+          />
           <SectionHoraires settings={settings!} saving={saving} onSave={saveSettings} />
           <SectionPromotions settings={settings!} saving={saving} onSave={saveSettings} />
           <SectionPaiements settings={settings!} saving={saving} onSave={saveSettings} />
@@ -120,109 +130,6 @@ export default function ParametresScreen() {
         </ScrollView>
       )}
     </KeyboardAvoidingView>
-  );
-}
-
-function SectionPasswords({ saving }: { saving: string | null }) {
-  const [adminPwd, setAdminPwd] = useState({ new: "", confirm: "" });
-  const [vendeurPwd, setVendeurPwd] = useState({ new: "", confirm: "" });
-  const [status, setStatus] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState<string | null>(null);
-
-  const updatePassword = async (role: "admin" | "vendeur") => {
-    const pwd = role === "admin" ? adminPwd : vendeurPwd;
-    if (!pwd.new || !pwd.confirm) {
-      setStatus((s) => ({ ...s, [role]: "Remplissez les deux champs." }));
-      return;
-    }
-    if (pwd.new !== pwd.confirm) {
-      setStatus((s) => ({ ...s, [role]: "Les mots de passe ne correspondent pas." }));
-      return;
-    }
-    if (pwd.new.length < 4) {
-      setStatus((s) => ({ ...s, [role]: "Minimum 4 caractères." }));
-      return;
-    }
-    setLoading(role);
-    try {
-      await api.settings.updatePassword({ role, newPassword: pwd.new, confirmPassword: pwd.confirm });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setStatus((s) => ({ ...s, [role]: "✓ Mot de passe mis à jour." }));
-      if (role === "admin") setAdminPwd({ new: "", confirm: "" });
-      else setVendeurPwd({ new: "", confirm: "" });
-    } catch (e: any) {
-      setStatus((s) => ({ ...s, [role]: e.message ?? "Erreur." }));
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  return (
-    <SectionCard
-      icon="lock"
-      title="Gestion des accès"
-      description="Modifier les mots de passe de connexion"
-    >
-      <SubTitle label="Mot de passe Admin" />
-      <PasswordFields
-        values={adminPwd}
-        onChange={setAdminPwd}
-        onSave={() => updatePassword("admin")}
-        loading={loading === "admin"}
-        status={status.admin}
-      />
-      <View style={styles.divider} />
-      <SubTitle label="Mot de passe Vendeur" />
-      <PasswordFields
-        values={vendeurPwd}
-        onChange={setVendeurPwd}
-        onSave={() => updatePassword("vendeur")}
-        loading={loading === "vendeur"}
-        status={status.vendeur}
-      />
-    </SectionCard>
-  );
-}
-
-function PasswordFields({
-  values,
-  onChange,
-  onSave,
-  loading,
-  status,
-}: {
-  values: { new: string; confirm: string };
-  onChange: (v: { new: string; confirm: string }) => void;
-  onSave: () => void;
-  loading: boolean;
-  status?: string;
-}) {
-  const isError = status && !status.startsWith("✓");
-  const isSuccess = status?.startsWith("✓");
-  return (
-    <View style={styles.passwordBlock}>
-      <Field
-        label="Nouveau mot de passe"
-        value={values.new}
-        onChangeText={(v) => onChange({ ...values, new: v })}
-        secureTextEntry
-        returnKeyType="next"
-      />
-      <Field
-        label="Confirmer le mot de passe"
-        value={values.confirm}
-        onChangeText={(v) => onChange({ ...values, confirm: v })}
-        secureTextEntry
-        returnKeyType="done"
-        onSubmitEditing={onSave}
-      />
-      {status ? (
-        <Text style={[styles.statusMsg, isSuccess ? styles.statusOk : styles.statusErr]}>
-          {status}
-        </Text>
-      ) : null}
-      <SaveButton label="Enregistrer" onPress={onSave} loading={loading} />
-    </View>
   );
 }
 
@@ -326,6 +233,7 @@ function SectionPaiements({
   onSave: (key: string, updates: Partial<Settings>) => Promise<void>;
 }) {
   const [cardEnabled, setCardEnabled] = useState(settings.card_payment_enabled === "true");
+  const [readerId, setReaderId] = useState(settings.sumup_reader_id ?? "");
   const sumupClientId = process.env.EXPO_PUBLIC_SUMUP_CLIENT_ID;
 
   const handleReauth = () => {
@@ -357,10 +265,20 @@ function SectionPaiements({
         value={sumupClientId ? "Configuré" : "Non configuré"}
         valueColor={sumupClientId ? COLORS.success : COLORS.danger}
       />
-      <InfoRow
-        label="Terminal ID"
-        value="200101010081"
-        valueColor={COLORS.textSecondary}
+      <View style={styles.divider} />
+      <Field
+        label="ID du lecteur SumUp (Reader ID)"
+        value={readerId}
+        onChangeText={setReaderId}
+        placeholder="rdr_xxxxxxxxxxxx"
+      />
+      <Text style={styles.fieldHint}>
+        Format : rdr_XXXXXXXXXXXXXXXXXXXX · Visible dans l'app SumUp Pro ou sur le lecteur.
+      </Text>
+      <SaveButton
+        label="Enregistrer Reader ID"
+        onPress={() => onSave("paiements_reader", { sumup_reader_id: readerId })}
+        loading={saving === "paiements_reader"}
       />
       <View style={styles.divider} />
       <Pressable
@@ -487,6 +405,24 @@ function SectionCard({
       </View>
       <View style={styles.sectionBody}>{children}</View>
     </View>
+  );
+}
+
+function NavRow({ icon, title, subtitle, onPress }: { icon: string; title: string; subtitle: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.navRow, pressed && { opacity: 0.7 }]}
+      onPress={onPress}
+    >
+      <View style={styles.sectionIconBg}>
+        <Feather name={icon as any} size={18} color={COLORS.accent} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionDesc}>{subtitle}</Text>
+      </View>
+      <Feather name="chevron-right" size={18} color={COLORS.textSecondary} />
+    </Pressable>
   );
 }
 
@@ -736,8 +672,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: COLORS.text,
   },
-  passwordBlock: {
-    gap: 10,
+  navRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: COLORS.card, borderRadius: 16,
+    borderWidth: 1, borderColor: COLORS.border,
+    padding: 16,
   },
   statusMsg: {
     fontSize: 13,

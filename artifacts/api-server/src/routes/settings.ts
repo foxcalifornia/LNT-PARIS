@@ -15,6 +15,7 @@ const PUBLIC_KEYS = [
   "shop_name",
   "shop_address",
   "currency",
+  "sumup_reader_id",
 ];
 
 router.get("/settings", async (req, res) => {

@@ -21,6 +21,7 @@ import { cartTotalItems, type CartItem } from "@/lib/cart";
 import { VenteModal } from "@/components/VenteModal";
 import { PanierModal } from "@/components/PanierModal";
 import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
 
 const COLORS = Colors.light;
 
@@ -31,9 +32,9 @@ function getTodayFr() {
   return new Date().toLocaleDateString("fr-FR");
 }
 
-function isCaisseHours() {
+function isCaisseHours(openHour = 10, closeHour = 20) {
   const h = new Date().getHours();
-  return h >= 10 && h < 20;
+  return h >= openHour && h < closeHour;
 }
 
 function getHeureStr() {
@@ -52,6 +53,7 @@ export default function CaisseScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { isAdmin, logout } = useAuth();
+  const { openHour, closeHour } = useSettings();
   const [caisseState, setCaisseState] = useState<CaisseState>("checking");
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -74,32 +76,32 @@ export default function CaisseScreen() {
       const todaySession = sessions.find((s) => s.date === today);
       if (todaySession) {
         setCurrentSession(todaySession);
-        if (isCaisseHours()) {
+        if (isCaisseHours(openHour, closeHour)) {
           setCaisseState("active");
         } else {
           setCaisseState(isAdmin ? "admin_view" : "closed_hours");
         }
       } else {
-        if (isCaisseHours()) {
+        if (isCaisseHours(openHour, closeHour)) {
           setCaisseState("need_open");
         } else {
           setCaisseState(isAdmin ? "admin_view" : "closed_hours");
         }
       }
     } catch {
-      if (isCaisseHours()) {
+      if (isCaisseHours(openHour, closeHour)) {
         setCaisseState("need_open");
       } else {
         setCaisseState(isAdmin ? "admin_view" : "closed_hours");
       }
     }
-  }, [isAdmin]);
+  }, [isAdmin, openHour, closeHour]);
 
   useEffect(() => {
     checkTodaySession();
 
     intervalRef.current = setInterval(() => {
-      if (!isCaisseHours() && adminOverrideRef.current !== "active") {
+      if (!isCaisseHours(openHour, closeHour) && adminOverrideRef.current !== "active") {
         setCaisseState((prev) => {
           if (prev === "active") {
             setCurrentSession(null);
@@ -154,10 +156,10 @@ export default function CaisseScreen() {
   };
 
   const openCaisse = async (forceOutsideHours = false) => {
-    if (forceOutsideHours && !isCaisseHours()) {
+    if (forceOutsideHours && !isCaisseHours(openHour, closeHour)) {
       Alert.alert(
         "Ouverture hors horaires",
-        "Vous êtes sur le point d'ouvrir la caisse en dehors des horaires habituels (10h–20h). Confirmez-vous ?",
+        `Vous êtes sur le point d'ouvrir la caisse en dehors des horaires habituels (${openHour}h–${closeHour}h). Confirmez-vous ?`,
         [
           { text: "Annuler", style: "cancel" },
           {
@@ -382,6 +384,7 @@ function ClosedView({
   hasSession: boolean;
   session: Session | null;
 }) {
+  const { openHour, closeHour } = useSettings();
   return (
     <View style={styles.closedContent}>
       <View style={styles.closedIcon}>
@@ -389,7 +392,7 @@ function ClosedView({
       </View>
       <Text style={styles.closedTitle}>Caisse Fermée</Text>
       <Text style={styles.closedSubtitle}>
-        Ouverte du lundi au dimanche{"\n"}de 10h00 à 20h00
+        Ouverte du lundi au dimanche{"\n"}de {openHour}h00 à {closeHour}h00
       </Text>
       {session && (
         <View style={styles.closedSessionInfo}>
@@ -418,7 +421,8 @@ function AdminConsultView({
   onShowInventaire: () => void;
   onShowVentesJour: () => void;
 }) {
-  const isInHours = isCaisseHours();
+  const { openHour, closeHour } = useSettings();
+  const isInHours = isCaisseHours(openHour, closeHour);
   const { data: ventesJour } = useQuery({
     queryKey: ["ventesJour"],
     queryFn: api.caisse.getVentesJour,

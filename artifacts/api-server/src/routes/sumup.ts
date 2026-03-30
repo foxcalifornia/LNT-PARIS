@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { db } from "@workspace/db";
-import { sumupCheckoutsTable, paymentLogsTable, ventesTable, produitsTable } from "@workspace/db/schema";
+import { sumupCheckoutsTable, paymentLogsTable, ventesTable, produitsTable, settingsTable } from "@workspace/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import {
   createSumUpCheckout,
@@ -48,6 +48,15 @@ router.post("/create", async (req, res) => {
       return;
     }
 
+    const settingsRows = await db.select().from(settingsTable).where(
+      and(eq(settingsTable.key, "card_payment_enabled"))
+    );
+    const cardEnabled = settingsRows.length === 0 || settingsRows[0]?.value !== "false";
+    if (!cardEnabled) {
+      res.status(403).json({ error: "Le paiement par carte bancaire est désactivé." });
+      return;
+    }
+
     const saleReference = `LNT-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
     const amountEur = montantCentimes / 100;
     const desc = description ?? `LNT Paris - ${items.length} article(s)`;
@@ -76,7 +85,8 @@ router.post("/create", async (req, res) => {
       sumupAnchorTs,
     });
 
-    const readerId = process.env["SUMUP_READER_ID"];
+    const readerRows = await db.select().from(settingsTable).where(eq(settingsTable.key, "sumup_reader_id"));
+    const readerId = readerRows[0]?.value || process.env["SUMUP_READER_ID"] || null;
     if (readerId) {
       try {
         await sendCheckoutToReader(readerId, {

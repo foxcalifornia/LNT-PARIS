@@ -20,6 +20,7 @@ import {
   type CartItem,
   type PromoResult,
 } from "@/lib/cart";
+import { useSettings } from "@/context/SettingsContext";
 
 const COLORS = Colors.light;
 
@@ -38,9 +39,12 @@ type Props = {
 
 export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose, onPayCarte }: Props) {
   const insets = useSafeAreaInsets();
+  const { promoEnabled, cardPaymentEnabled } = useSettings();
   const [view, setView] = useState<View>("collections");
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
-  const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(defaultPaymentMode ?? null);
+  const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(
+    defaultPaymentMode === "carte" && !cardPaymentEnabled ? null : (defaultPaymentMode ?? null)
+  );
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number } | null>(null);
@@ -50,7 +54,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
 
   const totalItems = cart.reduce((sum, i) => sum + i.quantite, 0);
   const totalCentimes = cart.reduce((sum, i) => sum + i.produit.prixCentimes * i.quantite, 0);
-  const promo = computePromo(cart);
+  const promoRaw = computePromo(cart);
+  const promo = promoEnabled ? promoRaw : { nbFree: 0, discountCentimes: 0, freeDetails: [] };
   const totalFinal = totalCentimes - promo.discountCentimes;
 
   const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
@@ -213,6 +218,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
             onUpdateCart={updateCart}
             getCartQty={getCartQty}
             contactInfo={contactInfo}
+            cardPaymentEnabled={cardPaymentEnabled}
             insets={insets}
           />
 
@@ -625,6 +631,7 @@ function PaymentView({
   onUpdateCart,
   getCartQty,
   contactInfo,
+  cardPaymentEnabled,
   insets,
 }: {
   totalItems: number;
@@ -639,6 +646,7 @@ function PaymentView({
   onUpdateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
   getCartQty: (id: number) => number;
   contactInfo: string;
+  cardPaymentEnabled: boolean;
   insets: { bottom: number };
 }) {
   const hasPromo = promo.nbFree > 0;
@@ -727,13 +735,20 @@ function PaymentView({
           <Feather name="dollar-sign" size={18} color={paymentMode === "cash" ? "#fff" : COLORS.cash} />
           <Text style={[styles.payModeBtnText, paymentMode === "cash" && { color: "#fff" }]}>Cash</Text>
         </Pressable>
-        <Pressable
-          style={[styles.payModeBtn, paymentMode === "carte" && { backgroundColor: COLORS.card_payment, borderColor: COLORS.card_payment }]}
-          onPress={() => { Haptics.selectionAsync(); onSelectPayment("carte"); }}
-        >
-          <Feather name="credit-card" size={18} color={paymentMode === "carte" ? "#fff" : COLORS.card_payment} />
-          <Text style={[styles.payModeBtnText, paymentMode === "carte" && { color: "#fff" }]}>Carte SumUp</Text>
-        </Pressable>
+        {cardPaymentEnabled ? (
+          <Pressable
+            style={[styles.payModeBtn, paymentMode === "carte" && { backgroundColor: COLORS.card_payment, borderColor: COLORS.card_payment }]}
+            onPress={() => { Haptics.selectionAsync(); onSelectPayment("carte"); }}
+          >
+            <Feather name="credit-card" size={18} color={paymentMode === "carte" ? "#fff" : COLORS.card_payment} />
+            <Text style={[styles.payModeBtnText, paymentMode === "carte" && { color: "#fff" }]}>Carte SumUp</Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.payModeBtn, { opacity: 0.35, borderStyle: "dashed" }]}>
+            <Feather name="credit-card" size={18} color={COLORS.textSecondary} />
+            <Text style={[styles.payModeBtnText, { color: COLORS.textSecondary }]}>Carte désactivée</Text>
+          </View>
+        )}
       </View>
 
       {/* Confirm */}

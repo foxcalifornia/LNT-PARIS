@@ -131,9 +131,18 @@ cd artifacts/mobile && REPLIT_INTERNAL_APP_DOMAIN=lntparis.replit.app node scrip
 cd artifacts/api-server && node build.mjs
 ```
 
+## Settings & Context
+
+- **SettingsContext** (`artifacts/mobile/context/SettingsContext.tsx`): Provides `promoEnabled`, `cardPaymentEnabled`, `openHour`, `closeHour`, `sumupReaderId`. Loaded from API at app start, call `refetch()` after saving.
+- **Promo gating**: `VenteModal` computes promo only when `promoEnabled=true`; falls back to zero discount.
+- **Carte gating**: Carte SumUp button hidden/disabled when `cardPaymentEnabled=false`.
+- **Parametres** (`artifacts/mobile/app/parametres/`): Stack layout with sub-screen `acces.tsx` for password management. Reader ID field added to Paiements section. Settings save calls `settingsCtx.refetch()`.
+- **Reporting punctuality**: `parsePunctuality` now accepts `openHour` from settings instead of hardcoded `10`.
+- **Inventaire price editing**: Product bottom sheet includes "Modifier le prix" expandable row via `prixMutation`.
+
 ## Password
 
-Le mot de passe pour accéder à la caisse et à l'inventaire est : **1234**
+Le mot de passe pour accéder à la caisse et à l'inventaire est : **1234** (Admin), **5678** (Vendeur)
 
 ## TypeScript & Composite Projects
 

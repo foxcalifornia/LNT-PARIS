@@ -438,7 +438,7 @@ type ProduitStockSheetProps = {
   onSuccess: () => void;
 };
 
-type SheetSection = "transfer" | "boutique" | "reserve" | "minimum" | null;
+type SheetSection = "transfer" | "boutique" | "reserve" | "minimum" | "prix" | null;
 
 function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess }: ProduitStockSheetProps) {
   const queryClient = useQueryClient();
@@ -478,6 +478,12 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
 
   const minimumMutation = useMutation({
     mutationFn: (stockMinimum: number) => api.inventory.updateProduit(produit!.id, { stockMinimum }),
+    onSuccess: onMutationSuccess,
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const prixMutation = useMutation({
+    mutationFn: (prixCentimes: number) => api.inventory.updateProduit(produit!.id, { prixCentimes }),
     onSuccess: onMutationSuccess,
     onError: (err: any) => Alert.alert("Erreur", err.message),
   });
@@ -522,7 +528,13 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
     minimumMutation.mutate(parsed);
   };
 
-  const isPending = transferMutation.isPending || boutiqueMutation.isPending || reserveMutation.isPending || minimumMutation.isPending;
+  const handlePrix = () => {
+    const euros = parseFloat(inputVal.replace(",", "."));
+    if (isNaN(euros) || euros < 0) { Alert.alert("Erreur", "Prix invalide"); return; }
+    prixMutation.mutate(Math.round(euros * 100));
+  };
+
+  const isPending = transferMutation.isPending || boutiqueMutation.isPending || reserveMutation.isPending || minimumMutation.isPending || prixMutation.isPending;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -708,6 +720,37 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
                 disabled={isPending || isNaN(parsed) || parsed < 0}
               >
                 {minimumMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer</Text>}
+              </Pressable>
+            </SheetActionRow>
+
+            <SheetActionRow
+              icon="tag"
+              label="Modifier le prix"
+              color={COLORS.accent}
+              open={openSection === "prix"}
+              onToggle={() => openSection === "prix" ? setOpenSection(null) : openSect("prix", produit.prixCentimes > 0 ? (produit.prixCentimes / 100).toFixed(2) : "")}
+            >
+              <View style={styles.prixRow}>
+                <Text style={styles.prixSymbol}>€</Text>
+                <TextInput
+                  style={[styles.sheetTextInput, { flex: 1 }]}
+                  value={inputVal}
+                  onChangeText={setInputVal}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={COLORS.textSecondary}
+                  selectTextOnFocus
+                />
+              </View>
+              <Text style={styles.sheetHint}>
+                Prix actuel : {produit.prixCentimes > 0 ? `${(produit.prixCentimes / 100).toFixed(2)} €` : "Non défini"}
+              </Text>
+              <Pressable
+                style={[styles.sheetActionBtn, { backgroundColor: COLORS.accent }, (isPending) && styles.btnDisabled]}
+                onPress={handlePrix}
+                disabled={isPending}
+              >
+                {prixMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer le prix</Text>}
               </Pressable>
             </SheetActionRow>
           </ScrollView>
