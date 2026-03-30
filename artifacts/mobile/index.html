@@ -9,7 +9,7 @@
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      background: #f5f5f5;
+      background: #1a1a1a;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -21,49 +21,81 @@
       padding: 40px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
     }
     h1 {
       margin: 0 0 20px 0;
       color: #333;
+      font-size: 24px;
     }
     p {
       margin: 0 0 20px 0;
       color: #666;
     }
-    a {
-      display: inline-block;
-      padding: 10px 20px;
-      background: #C9AD71;
-      color: white;
-      text-decoration: none;
-      border-radius: 4px;
+    .loading {
+      color: #C9AD71;
       font-weight: bold;
     }
-    a:hover {
-      background: #b39a5d;
+    .error {
+      color: #d32f2f;
+      display: none;
+      margin-top: 20px;
+      padding: 10px;
+      background: #ffebee;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>LNT Paris - Gestion de Stand</h1>
-    <p>Scan this with Expo Go or open on a mobile device</p>
-    <p><strong>Loading app...</strong></p>
-    <script>
-      // Try to find and open the latest build
-      fetch('.')
-        .then(r => r.text())
-        .then(html => {
-          // Look for timestamp directories
-          const matches = html.match(/href="(\d+-\d+)"/);
-          if (matches && matches[1]) {
-            window.location.href = `./${matches[1]}/`;
-          }
-        })
-        .catch(() => {
-          document.querySelector('p:last-of-type').innerHTML = 'Please wait a moment and refresh...';
-        });
-    </script>
+    <p>Chargement de l'application...</p>
+    <p class="loading" id="status">⏳ Recherche du build...</p>
+    <div class="error" id="error"></div>
   </div>
+
+  <script>
+    async function findAndLoadApp() {
+      try {
+        // Try to find the latest static build directory
+        const staticBuildResponse = await fetch('./static-build/');
+        if (!staticBuildResponse.ok) {
+          throw new Error('static-build directory not found');
+        }
+        
+        const html = await staticBuildResponse.text();
+        
+        // Extract timestamp directories (format: numbers-numbers)
+        const matches = html.match(/href="(\d+-\d+)\/"/g);
+        if (!matches || matches.length === 0) {
+          throw new Error('No build timestamp found');
+        }
+        
+        // Get the latest (last) timestamp
+        const timestamp = matches[matches.length - 1].match(/(\d+-\d+)/)[1];
+        const appPath = `./static-build/${timestamp}/`;
+        
+        console.log('Found build:', timestamp);
+        document.getElementById('status').textContent = '✓ Redirection vers l\'app...';
+        
+        // Redirect to the app
+        setTimeout(() => {
+          window.location.href = appPath;
+        }, 500);
+        
+      } catch (error) {
+        console.error('Error loading app:', error);
+        document.getElementById('status').textContent = '✗ Erreur de chargement';
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error').innerHTML = `
+          <strong>Erreur:</strong> ${error.message}<br><br>
+          <small>Rechargez la page ou contactez le support</small>
+        `;
+      }
+    }
+
+    // Start loading
+    findAndLoadApp();
+  </script>
 </body>
 </html>
