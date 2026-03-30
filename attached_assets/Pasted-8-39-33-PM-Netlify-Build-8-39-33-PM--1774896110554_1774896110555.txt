@@ -1,0 +1,115 @@
+8:39:33 PM: Netlify Build                                                 
+8:39:33 PM: ────────────────────────────────────────────────────────────────
+8:39:33 PM: ​
+8:39:33 PM: ❯ Version
+8:39:33 PM:   @netlify/build 35.11.2
+8:39:33 PM: ​
+8:39:33 PM: ❯ Flags
+8:39:33 PM:   accountId: 68af00d92121a787648b5162
+8:39:33 PM:   baseRelDir: true
+8:39:33 PM:   buildId: 69cac35160c4361006810c39
+8:39:33 PM:   deployId: 69cac35160c4361006810c3b
+8:39:33 PM:   packagePath: artifacts/mobile
+8:39:33 PM: ​
+8:39:33 PM: ❯ Current directory
+8:39:33 PM:   /opt/build/repo
+8:39:33 PM: ​
+8:39:33 PM: ❯ Config file
+8:39:33 PM:   /opt/build/repo/netlify.toml
+8:39:33 PM: ​
+8:39:33 PM: ❯ Context
+8:39:33 PM:   production
+8:39:33 PM: ​
+8:39:33 PM: build.command from netlify.toml                               
+8:39:33 PM: ────────────────────────────────────────────────────────────────
+8:39:33 PM: ​
+8:39:33 PM: $ pnpm --filter @workspace/mobile... run build
+8:39:33 PM: Scope: 2 of 9 workspace projects
+8:39:33 PM: artifacts/mobile build$ node scripts/build.js
+8:39:33 PM: artifacts/mobile build: Building static Expo Go deployment...
+8:39:33 PM: artifacts/mobile build: Preparing build directories...
+8:39:33 PM: artifacts/mobile build: Build: 1774895973910-2446
+8:39:33 PM: artifacts/mobile build: Clearing Metro cache...
+8:39:33 PM: artifacts/mobile build: Cache cleared
+8:39:33 PM: artifacts/mobile build: Starting Metro...
+8:39:33 PM: artifacts/mobile build: Setting EXPO_PUBLIC_DOMAIN=lntparis.netlify.app
+8:39:34 PM: artifacts/mobile build: [Metro] Starting project at /opt/build/repo/artifacts/mobile
+8:39:34 PM: artifacts/mobile build: [Metro] React Compiler enabled
+8:39:35 PM: artifacts/mobile build: [Metro] Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+8:39:35 PM: artifacts/mobile build: [Metro] Starting Metro Bundler
+8:39:35 PM: artifacts/mobile build: [Metro Error] The following packages should be updated for best compatibility with the installed expo version:
+8:39:35 PM: artifacts/mobile build: [Metro Error]   react-native-keyboard-controller@1.21.1 - expected version: 1.18.5
+8:39:35 PM: artifacts/mobile build: [Metro Error] Your project may not work correctly until you install the expected versions of the packages.
+8:39:35 PM: artifacts/mobile build: [Metro] Waiting on http://localhost:8081
+8:39:35 PM: artifacts/mobile build: [Metro] Logs for your project will appear below.
+8:39:35 PM: artifacts/mobile build: Metro ready
+8:39:35 PM: artifacts/mobile build: Downloading bundles and manifests...
+8:39:35 PM: artifacts/mobile build: This may take several minutes for production builds...
+8:39:35 PM: artifacts/mobile build: Fetching ios bundle...
+8:39:35 PM: artifacts/mobile build: Downloading: http://localhost:8081/artifacts/mobile/node_modules/expo-router/entry.bundle?platform=ios&amp;dev=false&amp;hot=false&amp;lazy=false&amp;minify=true
+8:39:38 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓░░░░░░░░░░░░░ 22.1% ( 38/209)
+8:39:42 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓░░░░░░░░░░░░░ 22.1% (140/354)
+8:39:45 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓░░░░░░░░░░░ 35.1% (367/681)
+8:39:49 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 50.9% (638/894)
+8:39:52 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 62.7% ( 807/1019)
+8:39:56 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 77.4% ( 975/1124)
+8:39:59 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.7% (1179/1279)
+8:40:03 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 87.2% (1311/1406)
+8:40:06 PM: artifacts/mobile build: [Metro] iOS node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.1% (1541/1570)
+8:40:08 PM: artifacts/mobile build: [Metro] iOS Bundled 31894ms node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js (1595 modules)
+8:40:08 PM: artifacts/mobile build: ios bundle ready
+8:40:08 PM: artifacts/mobile build: Fetching android bundle...
+8:40:08 PM: artifacts/mobile build: Downloading: http://localhost:8081/artifacts/mobile/node_modules/expo-router/entry.bundle?platform=android&amp;dev=false&amp;hot=false&amp;lazy=false&amp;minify=true
+8:40:10 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓░░░░░░░░░░░░░░░  8.2% ( 43/204)
+8:40:13 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓░░░░░░░░░░░░ 25.9% (313/615)
+8:40:17 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 39.1% ( 627/1003)
+8:40:20 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 65.3% ( 872/1079)
+8:40:24 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.8% (1040/1211)
+8:40:28 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 87.6% (1257/1343)
+8:40:31 PM: artifacts/mobile build: [Metro] Android node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 91.9% (1479/1547)
+8:40:33 PM: artifacts/mobile build: [Metro] Android Bundled 25068ms node_modules/.pnpm/expo-router@6.0.23_@types+react-dom@19.1.11_@types+react@19.1.17__@types+react@19.1.17__647f0c9f9fafa8cae778bbb6d28cc5ec/node_modules/expo-router/entry.js (1591 modules)
+8:40:33 PM: artifacts/mobile build: android bundle ready
+8:40:33 PM: artifacts/mobile build: Fetching ios manifest...
+8:40:33 PM: artifacts/mobile build: Fetching android manifest...
+8:40:33 PM: artifacts/mobile build: ios manifest ready
+8:40:33 PM: artifacts/mobile build: android manifest ready
+8:40:33 PM: artifacts/mobile build: All downloads completed successfully
+8:40:33 PM: artifacts/mobile build: Processing assets...
+8:40:33 PM: artifacts/mobile build: Found 49 unique asset(s)
+8:40:33 PM: artifacts/mobile build: Copying assets...
+8:40:33 PM: artifacts/mobile build: Copied 49 assets
+8:40:33 PM: artifacts/mobile build: Updated bundle URLs
+8:40:33 PM: artifacts/mobile build: Updating manifests and creating landing page...
+8:40:33 PM: artifacts/mobile build: Manifests updated
+8:40:33 PM: artifacts/mobile build: Build complete! Deploy to: https://lntparis.netlify.app
+8:40:33 PM: artifacts/mobile build: Done
+8:40:33 PM: ​
+8:40:33 PM: (build.command completed in 1m 0.3s)
+8:40:34 PM: ​
+8:40:34 PM: Finished processing build request in 1m19.635s
+Deploying
+Failed
+8:40:34 PM: Failed during stage 'building site': Build script returned non-zero exit code: 2 (https://ntl.fyi/exit-code-2)
+8:40:34 PM: Deploy site                                                   
+8:40:34 PM: ────────────────────────────────────────────────────────────────
+8:40:34 PM: ​
+8:40:34 PM: Section completed: deploying
+8:40:34 PM: ​
+8:40:34 PM: Configuration error                                           
+8:40:34 PM: ────────────────────────────────────────────────────────────────
+8:40:34 PM: ​
+8:40:34 PM:   Error message
+8:40:34 PM:   Deploy did not succeed: Deploy directory 'artifacts/mobile/dist' does not exist
+8:40:34 PM: ​
+8:40:34 PM:   Resolved config
+8:40:34 PM:   build:
+8:40:34 PM:     base: /opt/build/repo
+8:40:34 PM:     command: pnpm --filter @workspace/mobile... run build
+8:40:34 PM:     commandOrigin: config
+8:40:34 PM:     environment:
+8:40:34 PM:       - EXPO_PUBLIC_DOMAIN
+8:40:34 PM:       - EXPO_PUBLIC_API_URL
+8:40:34 PM:     publish: /opt/build/repo/artifacts/mobile/dist
+8:40:34 PM:     publishOrigin: config
+8:40:34 PM: Build failed due to a user error: Build script returned non-zero exit code: 2
+8:40:34 PM: Failing build: Failed to build site
