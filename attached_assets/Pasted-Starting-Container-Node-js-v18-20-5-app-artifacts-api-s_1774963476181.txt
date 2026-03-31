@@ -1,0 +1,60 @@
+Starting Container
+Node.js v18.20.5
+/app/artifacts/api-server:
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node --enable-source-maps ./dist/index.mjs`
+> node --enable-source-maps ./dist/index.mjs
+Exit status 1
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+/app/lib/db/src/index.ts:10
+  throw new Error(
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+        ^
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+Error: DATABASE_URL must be set. Did you forget to provision a database?
+    at <anonymous> (/app/lib/db/src/index.ts:10:9)
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node --enable-source-maps ./dist/index.mjs
+/app/artifacts/api-server:
+        ^
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+Error: DATABASE_URL must be set. Did you forget to provision a database?
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at <anonymous> (/app/lib/db/src/index.ts:10:9)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+/app/lib/db/src/index.ts:10
+  throw new Error(
+Node.js v18.20.5
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node --enable-source-maps ./dist/index.mjs
+/app/lib/db/src/index.ts:10
+  throw new Error(
+        ^
+Error: DATABASE_URL must be set. Did you forget to provision a database?
+    at <anonymous> (/app/lib/db/src/index.ts:10:9)
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+Node.js v18.20.5
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node --enable-source-maps ./dist/index.mjs`
+Exit status 1
+> @workspace/api-server@0.0.0 start /app/artifacts/api-server
+> node --enable-source-maps ./dist/index.mjs
+/app/lib/db/src/index.ts:10
+  throw new Error(
+        ^
+Error: DATABASE_URL must be set. Did you forget to provision a database?
+    at <anonymous> (/app/lib/db/src/index.ts:10:9)
+    at ModuleJob.run (node:internal/modules/esm/module_job:195:25)
+    at async ModuleLoader.import (node:internal/modules/esm/loader:337:24)
+    at async loadESM (node:internal/process/esm_loader:34:7)
+    at async handleMainPromise (node:internal/modules/run_main:106:12)
+Node.js v18.20.5
+/app/artifacts/api-server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 start: `node --enable-source-maps ./dist/index.mjs`
