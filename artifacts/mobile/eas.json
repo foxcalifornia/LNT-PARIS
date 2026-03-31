@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 18.4.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lnt-paris-production.up.railway.app",
+        "EXPO_PUBLIC_SUMUP_CLIENT_ID": "cc_classic_5X3WhQqARmlwslp9gsGdAx90RCSzH"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.lntparis.app"
+      "bundleIdentifier": "com.lntparis.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.lntparis.app"
@@ -27,7 +30,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://lnt-paris-production.up.railway.app"
         }
       ],
       "expo-font",
@@ -36,6 +39,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cd82c90f-99f7-48c1-96b0-4c2eb20e5f10"
+      }
+    },
+    "owner": "foxcalifornia"
   }
 }
