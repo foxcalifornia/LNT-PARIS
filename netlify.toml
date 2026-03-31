@@ -5,7 +5,7 @@ base = "."
 
 [build.environment]
 EXPO_PUBLIC_DOMAIN = "lntparis.netlify.app"
-EXPO_PUBLIC_API_URL = "https://lnt-paris.replit.app/api"
+EXPO_PUBLIC_API_URL = "https://lnt-paris-production.up.railway.app"
 
 # Redirect all non-existent files to index.html for SPA routing
 [[redirects]]

@@ -49,6 +49,9 @@ Thumbs.db
 .local/
 .replit
 
+# Generated build artifacts
+artifacts/mobile/static-build/
+
 # Environment variables
 .env
 .env.local
