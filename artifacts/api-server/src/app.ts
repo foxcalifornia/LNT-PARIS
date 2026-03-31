@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import path from "path";
 import fs from "fs";
@@ -52,7 +53,33 @@ app.use(
     },
   }),
 );
-app.use(cors());
+const allowedOrigins = [
+  "https://lnt-paris-production.up.railway.app",
+  "http://localhost:8081",
+  "http://localhost:19006",
+  ...(process.env.NODE_ENV === "development" ? ["http://localhost:18115", /\.replit\.dev$/] : []),
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = allowedOrigins.some(o =>
+      typeof o === "string" ? o === origin : o.test(origin)
+    );
+    callback(null, allowed);
+  },
+  credentials: true,
+}));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Trop de tentatives, réessayez dans 15 minutes" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api/auth", authLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
