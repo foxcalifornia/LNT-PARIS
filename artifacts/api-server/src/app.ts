@@ -61,9 +61,14 @@ app.use(express.urlencoded({ extended: true }));
 // from intercepting /api/auth/sumup before it can be matched here.
 const handleAuthSumup = (req: Request, res: Response) => {
   // SUMUP_DEV_CLIENT_ID overrides SUMUP_CLIENT_ID in dev environment
-  const CLIENT_ID = process.env["SUMUP_DEV_CLIENT_ID"] ?? process.env["SUMUP_CLIENT_ID"] ?? "";
-  // SUMUP_REDIRECT_URI is set per-environment (dev domain in dev, production URL in prod)
-  const REDIRECT_URI = process.env["SUMUP_REDIRECT_URI"] ?? "https://lntparis.replit.app/callback";
+  const CLIENT_ID = process.env["SUMUP_DEV_CLIENT_ID"] ?? process.env["SUMUP_CLIENT_ID"];
+  const REDIRECT_URI = process.env["SUMUP_REDIRECT_URI"];
+  
+  if (!CLIENT_ID || !REDIRECT_URI) {
+    res.status(500).json({ error: "Missing SumUp configuration" });
+    return;
+  }
+  
   const scope = "payments transactions.history readers.read readers.write";
   const url = new URL("https://api.sumup.com/authorize");
   url.searchParams.set("response_type", "code");
@@ -141,11 +146,14 @@ const handleCallback = async (req: Request, res: Response) => {
 
   try {
     // SUMUP_DEV_* vars override the production secrets in dev environment
-    const CLIENT_ID = process.env["SUMUP_DEV_CLIENT_ID"] ?? process.env["SUMUP_CLIENT_ID"] ?? "";
-    const CLIENT_SECRET = process.env["SUMUP_DEV_CLIENT_SECRET"] ?? process.env["SUMUP_CLIENT_SECRET"] ?? "";
-    const MERCHANT_CODE = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
-    // Must match the redirect_uri used in handleAuthSumup
-    const REDIRECT_URI = process.env["SUMUP_REDIRECT_URI"] ?? "https://lntparis.replit.app/callback";
+    const CLIENT_ID = process.env["SUMUP_DEV_CLIENT_ID"] ?? process.env["SUMUP_CLIENT_ID"];
+    const CLIENT_SECRET = process.env["SUMUP_DEV_CLIENT_SECRET"] ?? process.env["SUMUP_CLIENT_SECRET"];
+    const MERCHANT_CODE = process.env["SUMUP_MERCHANT_CODE"];
+    const REDIRECT_URI = process.env["SUMUP_REDIRECT_URI"];
+    
+    if (!CLIENT_ID || !CLIENT_SECRET || !MERCHANT_CODE || !REDIRECT_URI) {
+      throw new Error("Missing required SumUp environment variables");
+    }
 
     const tokenRes = await fetch("https://api.sumup.com/token", {
       method: "POST",

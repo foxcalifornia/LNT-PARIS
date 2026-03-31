@@ -14,9 +14,9 @@ import {
 } from "react-native";
 
 import Colors from "@/constants/colors";
+import { api } from "@/lib/api";
 
 const COLORS = Colors.light;
-const PASSWORD = "1234";
 
 type Props = {
   visible: boolean;
@@ -48,13 +48,23 @@ export function PasswordModal({ visible, title, onSuccess, onCancel }: Props) {
     ]).start();
   };
 
-  const handleSubmit = () => {
-    if (password === PASSWORD) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onSuccess();
-      setPassword("");
-      setError(false);
-    } else {
+  const handleSubmit = async () => {
+    try {
+      // Validate password via API (secure backend validation)
+      const result = await api.auth.login({
+        role: "admin",
+        password,
+      });
+      
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onSuccess();
+        setPassword("");
+        setError(false);
+      } else {
+        throw new Error("Validation failed");
+      }
+    } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(true);
       shake();

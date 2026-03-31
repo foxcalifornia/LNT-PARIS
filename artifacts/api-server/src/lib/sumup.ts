@@ -139,8 +139,12 @@ export async function createSumUpCheckout(opts: {
 }
 
 async function refreshUserToken(refreshTok: string): Promise<{ access_token: string; refresh_token?: string } | null> {
-  const clientId = process.env["SUMUP_CLIENT_ID"] ?? "";
-  const clientSecret = process.env["SUMUP_CLIENT_SECRET"] ?? "";
+  const clientId = process.env["SUMUP_CLIENT_ID"];
+  const clientSecret = process.env["SUMUP_CLIENT_SECRET"];
+  
+  if (!clientId || !clientSecret) {
+    throw new Error("Missing SUMUP_CLIENT_ID or SUMUP_CLIENT_SECRET environment variables");
+  }
   const res = await fetch(`${SUMUP_BASE}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -190,7 +194,10 @@ async function getUserToken(): Promise<string> {
 }
 
 async function doSendToReader(token: string, readerId: string, opts: { amountEur: number; currency: string; description?: string; clientRef: string }): Promise<{ status: number; text: string; ok: boolean }> {
-  const merchantCode = process.env["SUMUP_MERCHANT_CODE"] ?? "MC4VDM6U";
+  const merchantCode = process.env["SUMUP_MERCHANT_CODE"];
+  if (!merchantCode) {
+    throw new Error("SUMUP_MERCHANT_CODE environment variable is not set");
+  }
 
   // Primary: Merchant Readers API — links payment to checkout for auto-status-update
   const res = await fetch(

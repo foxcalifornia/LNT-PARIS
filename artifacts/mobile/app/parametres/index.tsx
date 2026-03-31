@@ -237,7 +237,11 @@ function SectionPaiements({
   const sumupClientId = process.env.EXPO_PUBLIC_SUMUP_CLIENT_ID;
 
   const handleReauth = () => {
-    const apiBase = process.env.EXPO_PUBLIC_API_URL || "https://lntparis.replit.app";
+    const apiBase = process.env.EXPO_PUBLIC_API_URL;
+    if (!apiBase) {
+      Alert.alert("Erreur", "URL API non configurée");
+      return;
+    }
     const authUrl = `${apiBase}/api/auth/sumup`;
     Alert.alert(
       "Réautorisation SumUp",

@@ -1,4 +1,8 @@
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || (() => {
+  throw new Error("EXPO_PUBLIC_API_URL environment variable is required");
+})();
+
+export { BASE_URL };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}/api${path}`;
