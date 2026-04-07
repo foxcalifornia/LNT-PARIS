@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -445,6 +446,7 @@ type TransferDirection = "reserve_to_boutique" | "boutique_to_reserve";
 function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess }: ProduitStockSheetProps) {
   const queryClient = useQueryClient();
   const { isAdmin } = useAuth();
+  const { height: screenHeight } = useWindowDimensions();
   const [openSection, setOpenSection] = useState<SheetSection>(null);
   const [inputVal, setInputVal] = useState("");
   const [transferDirection, setTransferDirection] = useState<TransferDirection>("reserve_to_boutique");
@@ -635,7 +637,7 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
             </View>
           )}
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 4 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: screenHeight * 0.92 - 260, marginTop: 4 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             {/* Transfert bidirectionnel boutique ↔ réserve */}
             <SheetActionRow
               icon="repeat"
