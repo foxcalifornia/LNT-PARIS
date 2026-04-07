@@ -584,101 +584,100 @@ function ProduitsView({
     freeCountByProduct.set(fd.produitId, fd.count);
   }
 
+  const { isTablet } = useResponsive();
+  const numCols = isTablet ? 3 : 2;
+  const GAP = 10;
+
   return (
     <View style={styles.flex}>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.gridContent, { padding: 12 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {collection.produits.map((p) => {
-          const produitWithCol = { ...p, collectionNom: collection.nom };
-          const cartQty = getCartQty(p.id);
-          const freeQty = freeCountByProduct.get(p.id) ?? 0;
-          const isEmpty = p.quantite === 0;
-          const isSelected = cartQty > 0;
-          return (
-            <View
-              key={p.id}
-              style={[
-                styles.productCard,
-                isEmpty && styles.productCardEmpty,
-                isSelected && styles.productCardSelected,
-              ]}
-            >
-              <View style={styles.productCardTop}>
-                <View style={[styles.colorDot, { backgroundColor: getColorHex(p.couleur) }]} />
-                <View style={styles.productCardInfo}>
-                  <View style={styles.productNameRow}>
-                    <Text style={[styles.productCardName, isEmpty && { color: COLORS.textSecondary }]}>
-                      {collection.nom} {p.couleur}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
+          {collection.produits.map((p) => {
+            const produitWithCol = { ...p, collectionNom: collection.nom };
+            const cartQty = getCartQty(p.id);
+            const freeQty = freeCountByProduct.get(p.id) ?? 0;
+            const isEmpty = p.quantite === 0;
+            const isSelected = cartQty > 0;
+            const colorHex = getColorHex(p.couleur);
+            const cardWidth = `${(100 - GAP * (numCols - 1) / (numCols)) / numCols}%` as any;
+
+            return (
+              <View
+                key={p.id}
+                style={[
+                  styles.productSquare,
+                  { width: cardWidth },
+                  isSelected && { borderColor: COLORS.accent, borderWidth: 2.5 },
+                  isEmpty && { opacity: 0.55 },
+                ]}
+              >
+                {/* Color swatch */}
+                <View style={[styles.productSquareSwatch, { backgroundColor: colorHex }]}>
+                  {isSelected && (
+                    <View style={styles.productSquareBadge}>
+                      <Text style={styles.productSquareBadgeText}>{cartQty}</Text>
+                    </View>
+                  )}
+                  {freeQty > 0 && (
+                    <View style={styles.productSquareGift}>
+                      <Feather name="gift" size={11} color="#fff" />
+                    </View>
+                  )}
+                  {isEmpty && (
+                    <View style={styles.productSquareEmpty}>
+                      <Text style={styles.productSquareEmptyText}>Épuisé</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Info */}
+                <View style={styles.productSquareInfo}>
+                  <Text style={styles.productSquareCouleur} numberOfLines={1}>{p.couleur}</Text>
+                  {p.prixCentimes > 0 && (
+                    <Text style={[styles.productSquarePrice, isSelected && { color: COLORS.accent }]}>
+                      {formatPrix(p.prixCentimes)}
                     </Text>
-                    {freeQty > 0 && (
-                      <View style={styles.freeBadge}>
-                        <Feather name="gift" size={11} color="#fff" />
-                        <Text style={styles.freeBadgeText}>
-                          {freeQty > 1 ? `${freeQty}x ` : ""}offerte
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.productMeta}>
-                    {p.prixCentimes > 0 && (
-                      <Text style={[styles.productPrice, { color: isSelected ? COLORS.accent : COLORS.accent }]}>
-                        {formatPrix(p.prixCentimes)}
-                      </Text>
-                    )}
-                    <Text
-                      style={[
-                        styles.productStock,
-                        isEmpty
-                          ? { color: COLORS.danger }
-                          : p.quantite <= 2
-                          ? { color: "#F59E0B" }
-                          : { color: COLORS.success },
-                      ]}
-                    >
-                      {isEmpty ? "Rupture de stock" : `${p.quantite} en stock`}
-                    </Text>
-                  </View>
+                  )}
+                  <Text
+                    style={[
+                      styles.productSquareStock,
+                      isEmpty ? { color: COLORS.danger } : p.quantite <= 2 ? { color: "#F59E0B" } : { color: COLORS.success },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {isEmpty ? "Rupture" : `${p.quantite} dispo`}
+                  </Text>
+                </View>
+
+                {/* Qty controls */}
+                <View style={[styles.productSquareQty, isEmpty && { opacity: 0.3 }]}>
+                  <Pressable
+                    style={[styles.productSquareBtn, cartQty > 0 && { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent }]}
+                    onPress={() => updateCart(produitWithCol, -1)}
+                    disabled={cartQty === 0 || isEmpty}
+                  >
+                    <Feather name="minus" size={14} color={cartQty > 0 ? COLORS.accent : COLORS.textSecondary} />
+                  </Pressable>
+                  <Text style={[styles.productSquareQtyVal, isSelected && { color: COLORS.accent, fontFamily: "Inter_700Bold" }]}>
+                    {cartQty}
+                  </Text>
+                  <Pressable
+                    style={[styles.productSquareBtn, cartQty < p.quantite && !isEmpty && { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent }]}
+                    onPress={() => updateCart(produitWithCol, +1)}
+                    disabled={cartQty >= p.quantite || isEmpty}
+                  >
+                    <Feather name="plus" size={14} color={cartQty < p.quantite && !isEmpty ? COLORS.accent : COLORS.textSecondary} />
+                  </Pressable>
                 </View>
               </View>
-
-              <View style={[styles.qtyControl, isEmpty && { opacity: 0.3 }]}>
-                <Pressable
-                  style={[
-                    styles.qtyBtn,
-                    cartQty > 0
-                      ? { borderColor: COLORS.accent, backgroundColor: COLORS.accent + "10" }
-                      : { borderColor: COLORS.border },
-                  ]}
-                  onPress={() => updateCart(produitWithCol, -1)}
-                  disabled={cartQty === 0 || isEmpty}
-                >
-                  <Feather name="minus" size={16} color={cartQty > 0 ? COLORS.accent : COLORS.textSecondary} />
-                </Pressable>
-                <Text style={[styles.qtyValue, isSelected && { color: COLORS.accent }]}>{cartQty}</Text>
-                <Pressable
-                  style={[
-                    styles.qtyBtn,
-                    cartQty < p.quantite && !isEmpty
-                      ? { borderColor: COLORS.accent, backgroundColor: COLORS.accent + "10" }
-                      : { borderColor: COLORS.border },
-                  ]}
-                  onPress={() => updateCart(produitWithCol, +1)}
-                  disabled={cartQty >= p.quantite || isEmpty}
-                >
-                  <Feather
-                    name="plus"
-                    size={16}
-                    color={cartQty < p.quantite && !isEmpty ? COLORS.accent : COLORS.textSecondary}
-                  />
-                </Pressable>
-              </View>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
         <View style={{ height: totalItems > 0 ? 80 : 16 }} />
       </ScrollView>
 
@@ -1238,6 +1237,118 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: COLORS.text,
     textTransform: "capitalize",
+  },
+
+  gridContent: {
+    paddingBottom: 4,
+  },
+  productSquare: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+  },
+  productSquareSwatch: {
+    width: "100%",
+    aspectRatio: 1.2,
+    position: "relative",
+    justifyContent: "flex-end",
+    alignItems: "flex-end",
+  },
+  productSquareBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  productSquareBadgeText: {
+    color: "#fff",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  productSquareGift: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  productSquareEmpty: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingVertical: 4,
+    alignItems: "center",
+  },
+  productSquareEmptyText: {
+    color: "#fff",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  productSquareInfo: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 4,
+    gap: 2,
+  },
+  productSquareCouleur: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+    textTransform: "capitalize",
+  },
+  productSquarePrice: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.accent,
+  },
+  productSquareStock: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+  },
+  productSquareQty: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    paddingTop: 4,
+    gap: 6,
+  },
+  productSquareBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  productSquareQtyVal: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
   },
 
   searchProductRow: {
