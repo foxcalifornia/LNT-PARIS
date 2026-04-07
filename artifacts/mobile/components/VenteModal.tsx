@@ -530,9 +530,17 @@ function CollectionsView({
                   >
                     {/* Icon swatch */}
                     <View style={styles.collectionSquareSwatch}>
-                      <View style={styles.collectionSquareIconWrap}>
-                        <Feather name="layers" size={32} color={COLORS.accent} />
-                      </View>
+                      {col.imageUrl ? (
+                        <Image
+                          source={{ uri: col.imageUrl }}
+                          style={StyleSheet.absoluteFill}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.collectionSquareIconWrap}>
+                          <Feather name="layers" size={32} color={COLORS.accent} />
+                        </View>
+                      )}
                       {inCart > 0 && (
                         <View style={styles.collectionSquareBadge}>
                           <Text style={styles.collectionSquareBadgeText}>{inCart}</Text>
