@@ -22,6 +22,7 @@ import {
   type PromoResult,
 } from "@/lib/cart";
 import { useSettings } from "@/context/SettingsContext";
+import { useResponsive, MAX_MODAL_WIDTH } from "@/hooks/useResponsive";
 
 const COLORS = Colors.light;
 
@@ -41,6 +42,7 @@ type Props = {
 export function VenteModal({ visible, collections, defaultPaymentMode, cart, onCartChange, onVente, onClose, onPayCarte }: Props) {
   const insets = useSafeAreaInsets();
   const { promoEnabled, cardPaymentEnabled } = useSettings();
+  const { isTablet } = useResponsive();
   const [view, setView] = useState<View>("collections");
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
   const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(
@@ -181,7 +183,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleClose}>
-      <View style={[styles.overlay, { paddingTop: insets.top }]}>
+      <View style={[styles.overlay, { paddingTop: insets.top }, isTablet && styles.overlayTablet]}>
+      <View style={isTablet ? [styles.tabletInner, { paddingBottom: insets.bottom }] : styles.flex}>
 
         {/* Header */}
         <View style={styles.sheetHeader}>
@@ -308,6 +311,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
             insets={insets}
           />
         )}
+      </View>
       </View>
       <ContactInfoModal
         visible={showContactModal}
@@ -1019,6 +1023,15 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  overlayTablet: {
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+  },
+  tabletInner: {
+    flex: 1,
+    width: "100%",
+    maxWidth: MAX_MODAL_WIDTH,
   },
   flex: {
     flex: 1,

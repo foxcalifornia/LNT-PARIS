@@ -24,6 +24,7 @@ import {
   type CartItem,
 } from "@/lib/cart";
 import { useSettings } from "@/context/SettingsContext";
+import { useResponsive, MAX_MODAL_WIDTH } from "@/hooks/useResponsive";
 
 const COLORS = Colors.light;
 const POLL_INTERVAL_MS = 3000;
@@ -44,6 +45,7 @@ type Props = {
 export function PanierModal({ visible, cart, collections, onCartChange, onClose, onVente, onRefreshAfterVente }: Props) {
   const insets = useSafeAreaInsets();
   const { promoEnabled } = useSettings();
+  const { isTablet } = useResponsive();
   const [editingProduitId, setEditingProduitId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -415,8 +417,8 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={isInTerminalFlow ? undefined : onClose}>
-      <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }]}>
-        <View style={styles.sheet}>
+      <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }, isTablet && styles.overlayTablet]}>
+        <View style={[styles.sheet, isTablet && styles.sheetTablet]}>
 
           <View style={styles.header}>
             {isInTerminalFlow ? (
@@ -747,8 +749,15 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1, backgroundColor: COLORS.background,
   },
+  overlayTablet: {
+    alignItems: "center",
+  },
   sheet: {
     flex: 1, backgroundColor: COLORS.card,
+  },
+  sheetTablet: {
+    width: "100%",
+    maxWidth: MAX_MODAL_WIDTH,
   },
   header: {
     flexDirection: "row", alignItems: "center",

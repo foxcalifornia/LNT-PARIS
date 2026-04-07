@@ -16,12 +16,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth, type Role } from "@/context/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 
 const COLORS = Colors.light;
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const { isTablet, contentMaxWidth } = useResponsive();
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
@@ -68,6 +70,7 @@ export default function LoginScreen() {
       style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <View style={[styles.inner, contentMaxWidth ? { maxWidth: contentMaxWidth, alignSelf: "center", width: "100%" } : undefined]}>
       <View style={styles.logoSection}>
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>LNT</Text>
@@ -181,6 +184,7 @@ export default function LoginScreen() {
       <View style={styles.footer}>
         <Text style={styles.footerText}>© 2026 LNT Paris · Tous droits réservés</Text>
       </View>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -191,6 +195,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     justifyContent: "space-between",
     paddingHorizontal: 20,
+  },
+  inner: {
+    flex: 1,
+    justifyContent: "space-between",
   },
   logoSection: {
     paddingTop: 48,

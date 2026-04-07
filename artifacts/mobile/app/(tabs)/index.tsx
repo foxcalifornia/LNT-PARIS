@@ -14,12 +14,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 
 const COLORS = Colors.light;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { role, logout, isAdmin } = useAuth();
+  const { isTablet, contentMaxWidth, horizontalPadding } = useResponsive();
 
   const handleLogout = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -58,74 +60,93 @@ export default function HomeScreen() {
   const roleBg = isAdmin ? "#FDF8F0" : "#ECFDF5";
   const roleIcon = isAdmin ? "settings" : "shopping-bag";
 
+  const adminCards = [
+    {
+      icon: "package",
+      title: "Inventaire",
+      subtitle: "Gérer les collections",
+      color: COLORS.accent,
+      bgColor: "#FDF8F0",
+      section: "inventaire" as const,
+    },
+    {
+      icon: "bar-chart-2",
+      title: "Rapports",
+      subtitle: "Ventes & chiffre d'affaires",
+      color: "#8B5CF6",
+      bgColor: "#F5F3FF",
+      section: "reporting" as const,
+    },
+    {
+      icon: "settings",
+      title: "Paramètres",
+      subtitle: "Accès, horaires, promotions",
+      color: "#0F766E",
+      bgColor: "#F0FDFA",
+      section: "parametres" as const,
+    },
+  ];
+
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>LNT</Text>
-          <View style={styles.logoDivider} />
-          <Text style={styles.logoSubText}>PARIS</Text>
+      <View style={styles.centerWrapper}>
+        <View style={[styles.inner, contentMaxWidth ? { maxWidth: contentMaxWidth } : undefined]}>
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Text style={[styles.logoText, isTablet && styles.logoTextLg]}>LNT</Text>
+              <View style={[styles.logoDivider, isTablet && styles.logoDividerLg]} />
+              <Text style={[styles.logoSubText, isTablet && styles.logoTextLg]}>PARIS</Text>
+            </View>
+            <Text style={styles.tagline}>Gestion de Stand</Text>
+
+            <View style={[styles.roleBadge, { backgroundColor: roleBg, borderColor: roleColor + "40" }]}>
+              <Feather name={roleIcon as any} size={13} color={roleColor} />
+              <Text style={[styles.roleBadgeText, { color: roleColor }]}>
+                Connecté en tant qu'<Text style={styles.roleBadgeBold}>{roleLabel}</Text>
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.content, { paddingHorizontal: isTablet ? 0 : horizontalPadding }]}>
+            <MenuCard
+              icon="shopping-bag"
+              title="Caisse"
+              subtitle="Enregistrer une vente"
+              color={COLORS.cash}
+              bgColor="#ECFDF5"
+              onPress={() => handlePress("caisse")}
+              isTablet={isTablet}
+              fullWidth
+            />
+
+            {isAdmin && (
+              <View style={isTablet ? styles.gridRow : styles.stackCol}>
+                {adminCards.map((card) => (
+                  <MenuCard
+                    key={card.section}
+                    icon={card.icon}
+                    title={card.title}
+                    subtitle={card.subtitle}
+                    color={card.color}
+                    bgColor={card.bgColor}
+                    onPress={() => handlePress(card.section)}
+                    isTablet={isTablet}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.footer}>
+            <Pressable style={styles.logoutBtn} onPress={handleLogout}>
+              <Feather name="log-out" size={15} color={COLORS.danger} />
+              <Text style={styles.logoutText}>Se déconnecter</Text>
+            </Pressable>
+            <Text style={styles.footerText}>© 2026 LNT Paris · Tous droits réservés</Text>
+          </View>
         </View>
-        <Text style={styles.tagline}>Gestion de Stand</Text>
-
-        <View style={[styles.roleBadge, { backgroundColor: roleBg, borderColor: roleColor + "40" }]}>
-          <Feather name={roleIcon as any} size={13} color={roleColor} />
-          <Text style={[styles.roleBadgeText, { color: roleColor }]}>
-            Connecté en tant qu'<Text style={styles.roleBadgeBold}>{roleLabel}</Text>
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.content}>
-        <MenuCard
-          icon="shopping-bag"
-          title="Caisse"
-          subtitle="Enregistrer une vente"
-          color={COLORS.cash}
-          bgColor="#ECFDF5"
-          onPress={() => handlePress("caisse")}
-        />
-
-        {isAdmin && (
-          <>
-            <MenuCard
-              icon="package"
-              title="Inventaire"
-              subtitle="Gérer les collections"
-              color={COLORS.accent}
-              bgColor="#FDF8F0"
-              onPress={() => handlePress("inventaire")}
-            />
-
-            <MenuCard
-              icon="bar-chart-2"
-              title="Rapports"
-              subtitle="Ventes & chiffre d'affaires"
-              color="#8B5CF6"
-              bgColor="#F5F3FF"
-              onPress={() => handlePress("reporting")}
-            />
-
-            <MenuCard
-              icon="settings"
-              title="Paramètres"
-              subtitle="Accès, horaires, promotions"
-              color="#0F766E"
-              bgColor="#F0FDFA"
-              onPress={() => handlePress("parametres")}
-            />
-          </>
-        )}
-      </View>
-
-      <View style={styles.footer}>
-        <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-          <Feather name="log-out" size={15} color={COLORS.danger} />
-          <Text style={styles.logoutText}>Se déconnecter</Text>
-        </Pressable>
-        <Text style={styles.footerText}>© 2026 LNT Paris · Tous droits réservés</Text>
       </View>
     </View>
   );
@@ -138,27 +159,39 @@ type MenuCardProps = {
   color: string;
   bgColor: string;
   onPress: () => void;
+  isTablet?: boolean;
+  fullWidth?: boolean;
 };
 
-function MenuCard({ icon, title, subtitle, color, bgColor, onPress }: MenuCardProps) {
+function MenuCard({ icon, title, subtitle, color, bgColor, onPress, isTablet, fullWidth }: MenuCardProps) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
+        isTablet && !fullWidth && styles.cardGrid,
         { opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
       ]}
       onPress={onPress}
     >
-      <View style={[styles.cardIconContainer, { backgroundColor: bgColor }]}>
-        <Feather name={icon as any} size={28} color={color} />
+      <View style={[styles.cardIconContainer, { backgroundColor: bgColor }, isTablet && !fullWidth && styles.cardIconContainerGrid]}>
+        <Feather name={icon as any} size={isTablet && !fullWidth ? 32 : 28} color={color} />
       </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardSubtitle}>{subtitle}</Text>
-      </View>
-      <View style={[styles.cardArrow, { backgroundColor: bgColor }]}>
-        <Feather name="chevron-right" size={20} color={color} />
-      </View>
+      {isTablet && !fullWidth ? (
+        <View style={styles.cardContentGrid}>
+          <Text style={[styles.cardTitle, styles.cardTitleGrid]}>{title}</Text>
+          <Text style={[styles.cardSubtitle, styles.cardSubtitleGrid]}>{subtitle}</Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>{title}</Text>
+            <Text style={styles.cardSubtitle}>{subtitle}</Text>
+          </View>
+          <View style={[styles.cardArrow, { backgroundColor: bgColor }]}>
+            <Feather name="chevron-right" size={20} color={color} />
+          </View>
+        </>
+      )}
     </Pressable>
   );
 }
@@ -167,6 +200,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  centerWrapper: {
+    flex: 1,
+    alignItems: "center",
+  },
+  inner: {
+    flex: 1,
+    width: "100%",
   },
   header: {
     paddingTop: 40,
@@ -186,11 +227,17 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     letterSpacing: 8,
   },
+  logoTextLg: {
+    fontSize: 48,
+  },
   logoDivider: {
     width: 1.5,
     height: 32,
     backgroundColor: COLORS.accent,
     marginHorizontal: 4,
+  },
+  logoDividerLg: {
+    height: 40,
   },
   logoSubText: {
     fontSize: 38,
@@ -225,9 +272,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
     gap: 16,
     justifyContent: "center",
+  },
+  stackCol: {
+    gap: 16,
+  },
+  gridRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
   },
   card: {
     backgroundColor: COLORS.card,
@@ -244,6 +298,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  cardGrid: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    flex: 1,
+    minWidth: 160,
+    padding: 24,
+    gap: 14,
+  },
   cardIconContainer: {
     width: 64,
     height: 64,
@@ -251,9 +313,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  cardIconContainerGrid: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+  },
   cardContent: {
     flex: 1,
     gap: 3,
+  },
+  cardContentGrid: {
+    gap: 4,
   },
   cardTitle: {
     fontSize: 18,
@@ -261,10 +331,16 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.3,
   },
+  cardTitleGrid: {
+    fontSize: 20,
+  },
   cardSubtitle: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
+  },
+  cardSubtitleGrid: {
+    fontSize: 14,
   },
   cardArrow: {
     width: 36,
