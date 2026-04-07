@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -585,33 +586,39 @@ function ProduitsView({
   }
 
   const { isTablet } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
   const numCols = isTablet ? 3 : 2;
+  const PADDING = 12;
   const GAP = 10;
+  const containerWidth = Math.min(screenWidth, MAX_MODAL_WIDTH);
+  const cardWidth = Math.floor((containerWidth - PADDING * 2 - GAP * (numCols - 1)) / numCols);
 
   return (
     <View style={styles.flex}>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={[styles.gridContent, { padding: 12 }]}
+        contentContainerStyle={[styles.gridContent, { padding: PADDING }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-          {collection.produits.map((p) => {
+        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+          {collection.produits.map((p, idx) => {
             const produitWithCol = { ...p, collectionNom: collection.nom };
             const cartQty = getCartQty(p.id);
             const freeQty = freeCountByProduct.get(p.id) ?? 0;
             const isEmpty = p.quantite === 0;
             const isSelected = cartQty > 0;
             const colorHex = getColorHex(p.couleur);
-            const cardWidth = `${(100 - GAP * (numCols - 1) / (numCols)) / numCols}%` as any;
+            const col = idx % numCols;
+            const marginRight = col < numCols - 1 ? GAP : 0;
+            const marginBottom = GAP;
 
             return (
               <View
                 key={p.id}
                 style={[
                   styles.productSquare,
-                  { width: cardWidth },
+                  { width: cardWidth, marginRight, marginBottom },
                   isSelected && { borderColor: COLORS.accent, borderWidth: 2.5 },
                   isEmpty && { opacity: 0.55 },
                 ]}
