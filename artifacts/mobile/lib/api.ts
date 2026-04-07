@@ -190,6 +190,7 @@ export type VenteOpts = {
   remiseType?: string;
   commentaire?: string;
   groupKey?: string;
+  montantCashCentimes?: number;
 };
 
 export function formatPrix(centimes: number): string {
@@ -272,6 +273,11 @@ export const api = {
       }),
     batchVente: (data: { items: { produitId: number; quantite: number }[]; typePaiement: "CASH" } & VenteOpts) =>
       request<{ message: string; totalArticles: number }>("/ventes/batch", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    batchVenteMixte: (data: { items: { produitId: number; quantite: number }[]; montantCashCentimes: number } & VenteOpts) =>
+      request<{ message: string; totalArticles: number; montantCashCentimes: number; montantCarteCentimes: number }>("/ventes/batch-mixte", {
         method: "POST",
         body: JSON.stringify(data),
       }),

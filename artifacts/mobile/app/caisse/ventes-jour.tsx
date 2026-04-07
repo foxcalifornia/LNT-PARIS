@@ -140,8 +140,9 @@ function SummaryCard({
 
 function TransactionCard({ transaction: t }: { transaction: VenteTransaction }) {
   const isCash = t.typePaiement === "CASH";
+  const isMixte = t.typePaiement === "MIXTE";
   const isCancelled = t.cancelled ?? false;
-  const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : COLORS.card_payment);
+  const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : isMixte ? "#8B5CF6" : COLORS.card_payment);
 
   return (
     <Pressable
@@ -156,12 +157,12 @@ function TransactionCard({ transaction: t }: { transaction: VenteTransaction }) 
         <View style={styles.txHeaderLeft}>
           <View style={[styles.txModeBadge, { backgroundColor: color + "18" }]}>
             <Feather
-              name={isCash ? "dollar-sign" : "credit-card"}
+              name={isCash ? "dollar-sign" : isMixte ? "layers" : "credit-card"}
               size={13}
               color={color}
             />
             <Text style={[styles.txModeText, { color }]}>
-              {isCash ? "Cash" : "Carte"}
+              {isCash ? "Cash" : isMixte ? "Mixte" : "Carte"}
             </Text>
           </View>
           <Text style={styles.txHeure}>{t.heure}</Text>

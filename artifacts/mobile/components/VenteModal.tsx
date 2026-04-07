@@ -34,7 +34,7 @@ type Props = {
   defaultPaymentMode?: "cash" | "carte";
   cart: CartItem[];
   onCartChange: (cart: CartItem[]) => void;
-  onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte", opts?: VenteOpts) => Promise<void>;
+  onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte" | "mixte", opts?: VenteOpts) => Promise<void>;
   onClose: () => void;
   onPayCarte?: () => void;
 };
@@ -45,12 +45,13 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const { isTablet } = useResponsive();
   const [view, setView] = useState<View>("collections");
   const [selectedCollection, setSelectedCollection] = useState<CollectionWithProduits | null>(null);
-  const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | null>(
+  const [paymentMode, setPaymentMode] = useState<"cash" | "carte" | "mixte" | null>(
     defaultPaymentMode === "carte" && !cardPaymentEnabled ? null : (defaultPaymentMode ?? null)
   );
+  const [cashInput, setCashInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number; remise: number; paymentMode: "cash" | "carte"; commentaire: string } | null>(null);
+  const [successSnapshot, setSuccessSnapshot] = useState<{ items: number; total: number; remise: number; paymentMode: "cash" | "carte" | "mixte"; cashPart?: number; cartePart?: number; commentaire: string } | null>(null);
   const [search, setSearch] = useState("");
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactInfo, setContactInfo] = useState("");
@@ -66,7 +67,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
   const totalApresPromo = totalCentimes - promo.discountCentimes;
   const totalFinal = Math.max(0, totalApresPromo - remiseCentimes);
 
-  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
+  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : paymentMode === "mixte" ? "#8B5CF6" : COLORS.accent;
 
   const getCartQty = (produitId: number) =>
     cart.find((i) => i.produit.id === produitId)?.quantite ?? 0;
@@ -99,6 +100,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
     setRemiseType("fixe");
     setRemiseInput("");
     setCommentaire("");
+    setCashInput("");
     onClose();
   };
 
@@ -136,6 +138,12 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
       handleConfirmCarte();
       return;
     }
+    if (paymentMode === "mixte") {
+      const cashVal = parseFloat(cashInput.replace(",", "."));
+      if (isNaN(cashVal) || cashVal < 0) {
+        return;
+      }
+    }
     setLoading(true);
     try {
       const opts: VenteOpts = {};
@@ -144,8 +152,14 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
         opts.remiseType = remiseType;
       }
       if (commentaire.trim()) opts.commentaire = commentaire.trim();
+      if (paymentMode === "mixte") {
+        const cashCentimes = Math.round(parseFloat(cashInput.replace(",", ".")) * 100);
+        opts.montantCashCentimes = Math.min(cashCentimes, totalFinal);
+      }
       await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), paymentMode, opts);
-      setSuccessSnapshot({ items: totalItems, total: totalFinal, remise: remiseCentimes, paymentMode, commentaire: commentaire.trim() });
+      const cashPart = paymentMode === "mixte" ? Math.min(Math.round(parseFloat(cashInput.replace(",", ".")) * 100), totalFinal) : undefined;
+      const cartePart = paymentMode === "mixte" && cashPart !== undefined ? totalFinal - cashPart : undefined;
+      setSuccessSnapshot({ items: totalItems, total: totalFinal, remise: remiseCentimes, paymentMode, cashPart, cartePart, commentaire: commentaire.trim() });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -220,7 +234,7 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
                 const lines = cart.map((i) => `  • ${i.produit.collectionNom} ${i.produit.couleur} x${i.quantite} — ${formatPrix(i.produit.prixCentimes * i.quantite)}`).join("\n");
                 const remiseLine = successSnapshot.remise > 0 ? `\nRemise : -${formatPrix(successSnapshot.remise)}` : "";
                 const commentLine = successSnapshot.commentaire ? `\nCommentaire : ${successSnapshot.commentaire}` : "";
-                const mode = successSnapshot.paymentMode === "cash" ? "Espèces" : "Carte SumUp";
+                const mode = successSnapshot.paymentMode === "cash" ? "Espèces" : successSnapshot.paymentMode === "carte" ? "Carte SumUp" : `Mixte (Espèces ${formatPrix(successSnapshot.cashPart ?? 0)} + Carte ${formatPrix(successSnapshot.cartePart ?? 0)})`;
                 const ticket = `🏪 LNT Paris\n──────────────\n${lines}${remiseLine}\n──────────────\nTotal : ${formatPrix(successSnapshot.total)}\nPaiement : ${mode}\nHeure : ${now}${commentLine}\n──────────────\nMerci !`;
                 Share.share({ message: ticket, title: "Ticket LNT Paris" });
               }}
@@ -279,6 +293,8 @@ export function VenteModal({ visible, collections, defaultPaymentMode, cart, onC
               }
             }}
             onCommentaireChange={setCommentaire}
+            cashInput={cashInput}
+            onCashInputChange={setCashInput}
           />
 
         ) : view === "produits" && selectedCollection ? (
@@ -701,6 +717,8 @@ function PaymentView({
   onRemiseTypeChange,
   onRemiseInputChange,
   onCommentaireChange,
+  cashInput,
+  onCashInputChange,
 }: {
   totalItems: number;
   totalCentimes: number;
@@ -708,8 +726,8 @@ function PaymentView({
   totalFinal: number;
   promo: PromoResult;
   cart: CartItem[];
-  paymentMode: "cash" | "carte" | null;
-  onSelectPayment: (mode: "cash" | "carte") => void;
+  paymentMode: "cash" | "carte" | "mixte" | null;
+  onSelectPayment: (mode: "cash" | "carte" | "mixte") => void;
   loading: boolean;
   onConfirm: () => void;
   onUpdateCart: (p: Produit & { collectionNom: string }, delta: number) => void;
@@ -724,9 +742,15 @@ function PaymentView({
   onRemiseTypeChange: (t: "fixe" | "pct") => void;
   onRemiseInputChange: (val: string) => void;
   onCommentaireChange: (val: string) => void;
+  cashInput: string;
+  onCashInputChange: (val: string) => void;
 }) {
   const hasPromo = promo.nbFree > 0;
-  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : COLORS.accent;
+  const confirmColor = paymentMode === "carte" ? COLORS.card_payment : paymentMode === "cash" ? COLORS.cash : paymentMode === "mixte" ? "#8B5CF6" : COLORS.accent;
+
+  const cashCentimes = paymentMode === "mixte" ? Math.min(Math.round(parseFloat(cashInput.replace(",", ".")) * 100) || 0, totalFinal) : 0;
+  const carteCentimes = paymentMode === "mixte" ? totalFinal - cashCentimes : 0;
+  const mixteInputValid = paymentMode !== "mixte" || (cashInput.trim() !== "" && !isNaN(parseFloat(cashInput.replace(",", "."))));
 
   return (
     <ScrollView
@@ -865,23 +889,60 @@ function PaymentView({
           </View>
         )}
       </View>
+      <Pressable
+        style={[styles.payModeBtn, { flex: 0, width: "100%", marginTop: 8 }, paymentMode === "mixte" && { backgroundColor: "#8B5CF6", borderColor: "#8B5CF6" }]}
+        onPress={() => { Haptics.selectionAsync(); onSelectPayment("mixte"); }}
+      >
+        <Feather name="layers" size={18} color={paymentMode === "mixte" ? "#fff" : "#8B5CF6"} />
+        <Text style={[styles.payModeBtnText, paymentMode === "mixte" && { color: "#fff" }]}>Paiement mixte (Cash + Carte)</Text>
+      </Pressable>
+
+      {/* Mixte cash input */}
+      {paymentMode === "mixte" && (
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.paymentSectionLabel}>Montant payé en espèces (€)</Text>
+          <TextInput
+            style={styles.remiseInput}
+            placeholder={`Ex: ${((totalFinal / 2) / 100).toFixed(2).replace(".", ",")} €`}
+            placeholderTextColor={COLORS.textSecondary}
+            value={cashInput}
+            onChangeText={onCashInputChange}
+            keyboardType="decimal-pad"
+            autoFocus
+          />
+          {cashInput.trim() !== "" && !isNaN(parseFloat(cashInput.replace(",", "."))) && (
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8, paddingHorizontal: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Feather name="dollar-sign" size={14} color={COLORS.cash} />
+                <Text style={{ color: COLORS.cash, fontWeight: "600", fontSize: 14 }}>Espèces : {formatPrix(cashCentimes)}</Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Feather name="credit-card" size={14} color={COLORS.card_payment} />
+                <Text style={{ color: COLORS.card_payment, fontWeight: "600", fontSize: 14 }}>Carte : {formatPrix(carteCentimes)}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Confirm */}
       <Pressable
-        style={[styles.confirmBtn, { backgroundColor: confirmColor }, (loading || !paymentMode) && { opacity: 0.45 }]}
+        style={[styles.confirmBtn, { backgroundColor: confirmColor }, (loading || !paymentMode || !mixteInputValid) && { opacity: 0.45 }]}
         onPress={onConfirm}
-        disabled={loading || !paymentMode}
+        disabled={loading || !paymentMode || !mixteInputValid}
       >
         {loading ? (
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <>
-            <Feather name={paymentMode === "carte" ? "credit-card" : "check"} size={20} color="#fff" />
+            <Feather name={paymentMode === "carte" ? "credit-card" : paymentMode === "mixte" ? "layers" : "check"} size={20} color="#fff" />
             <Text style={styles.confirmText}>
               {paymentMode === "carte"
                 ? "Payer sur le terminal SumUp"
                 : paymentMode === "cash"
                 ? "Confirmer le paiement cash"
+                : paymentMode === "mixte"
+                ? "Confirmer le paiement mixte"
                 : "Choisir le mode de paiement"}
             </Text>
           </>

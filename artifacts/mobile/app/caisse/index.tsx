@@ -207,14 +207,21 @@ export default function CaisseScreen() {
 
   const handleVente = async (
     items: { produitId: number; quantite: number }[],
-    paymentMode: "cash" | "carte",
+    paymentMode: "cash" | "carte" | "mixte",
     opts?: import("@/lib/api").VenteOpts
   ) => {
     if (!currentSession) return;
     if (paymentMode === "carte") {
       throw new Error("Les paiements carte doivent passer par le terminal SumUp.");
     }
-    await api.inventory.batchVente({ items, typePaiement: "CASH", ...opts });
+    if (paymentMode === "mixte") {
+      if (!opts?.montantCashCentimes && opts?.montantCashCentimes !== 0) {
+        throw new Error("Montant cash requis pour un paiement mixte.");
+      }
+      await api.inventory.batchVenteMixte({ items, montantCashCentimes: opts.montantCashCentimes, ...opts });
+    } else {
+      await api.inventory.batchVente({ items, typePaiement: "CASH", ...opts });
+    }
     refetchCollections();
     queryClient.invalidateQueries({ queryKey: ["ventesJour"] });
     queryClient.invalidateQueries({ queryKey: ["consommables"] });
@@ -808,8 +815,9 @@ function ActiveCaisseView({
           ) : (
             ventesJour.transactions.slice(0, 8).map((t, i) => {
               const isCash = t.typePaiement === "CASH";
+              const isMixte = t.typePaiement === "MIXTE";
               const isCancelled = t.cancelled ?? false;
-              const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : COLORS.card_payment);
+              const color = isCancelled ? COLORS.textSecondary : (isCash ? COLORS.cash : isMixte ? "#8B5CF6" : COLORS.card_payment);
               return (
                 <Pressable
                   key={t.groupKey ?? i}
@@ -824,12 +832,12 @@ function ActiveCaisseView({
                   <Text style={styles.txJourSep}>—</Text>
                   <View style={[styles.txJourBadge, { backgroundColor: color + "18" }]}>
                     <Feather
-                      name={isCash ? "dollar-sign" : "credit-card"}
+                      name={isCash ? "dollar-sign" : isMixte ? "layers" : "credit-card"}
                       size={11}
                       color={color}
                     />
                     <Text style={[styles.txJourBadgeText, { color }]}>
-                      {isCash ? "Cash" : "Carte"}
+                      {isCash ? "Cash" : isMixte ? "Mixte" : "Carte"}
                     </Text>
                   </View>
                   {isCancelled ? (

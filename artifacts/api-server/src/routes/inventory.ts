@@ -421,6 +421,111 @@ router.post("/ventes/batch", async (req, res) => {
   }
 });
 
+router.post("/ventes/batch-mixte", async (req, res) => {
+  try {
+    const { items, montantCashCentimes, remiseCentimes, remiseType, commentaire, groupKey } = req.body as {
+      items: { produitId: number; quantite: number }[];
+      montantCashCentimes: number;
+      remiseCentimes?: number;
+      remiseType?: string;
+      commentaire?: string;
+      groupKey?: string;
+    };
+
+    if (!items || items.length === 0) {
+      res.status(400).json({ error: "Panier vide" });
+      return;
+    }
+    if (typeof montantCashCentimes !== "number" || montantCashCentimes < 0) {
+      res.status(400).json({ error: "Montant cash invalide" });
+      return;
+    }
+
+    const remiseTotale = remiseCentimes ?? 0;
+    const nbItems = items.reduce((s, i) => s + i.quantite, 0);
+    let totalArticles = 0;
+    let totalMontant = 0;
+
+    const produits: { produit: typeof produitsTable.$inferSelect; quantite: number; montantBrut: number }[] = [];
+
+    for (const item of items) {
+      const [produit] = await db
+        .select()
+        .from(produitsTable)
+        .where(eq(produitsTable.id, item.produitId))
+        .limit(1);
+
+      if (!produit) {
+        res.status(404).json({ error: `Produit ${item.produitId} introuvable` });
+        return;
+      }
+      if (produit.quantite < item.quantite) {
+        res.status(400).json({ error: `Stock boutique insuffisant pour ${produit.couleur}` });
+        return;
+      }
+
+      const montantBrut = produit.prixCentimes * item.quantite;
+      totalMontant += montantBrut;
+      produits.push({ produit, quantite: item.quantite, montantBrut });
+    }
+
+    const totalFinal = Math.max(0, totalMontant - remiseTotale);
+    const cashPart = Math.min(montantCashCentimes, totalFinal);
+    const cartePart = totalFinal - cashPart;
+
+    for (const { produit, quantite, montantBrut } of produits) {
+      const remiseProportion = nbItems > 0 ? quantite / nbItems : 0;
+      const remiseItem = Math.round(remiseTotale * remiseProportion);
+      const montantCentimes = Math.max(0, montantBrut - remiseItem);
+      const cashItemPart = Math.round(cashPart * (montantCentimes / totalFinal));
+      const carteItemPart = montantCentimes - cashItemPart;
+      const newBoutique = produit.quantite - quantite;
+
+      await db.insert(ventesTable).values({
+        produitId: produit.id,
+        quantiteVendue: quantite,
+        typePaiement: "MIXTE",
+        montantCentimes,
+        montantCashCentimes: cashItemPart,
+        montantCarteCentimes: carteItemPart,
+        remiseCentimes: remiseItem,
+        remiseType: remiseType ?? null,
+        commentaire: commentaire ?? null,
+        groupKey: groupKey ?? null,
+      });
+
+      await db
+        .update(produitsTable)
+        .set({ quantite: newBoutique })
+        .where(eq(produitsTable.id, produit.id));
+
+      await db.insert(mouvementsStockTable).values({
+        produitId: produit.id,
+        typeMouvement: "vente",
+        quantite,
+        stockBoutiqueAvant: produit.quantite,
+        stockBoutiqueApres: newBoutique,
+        stockReserveAvant: produit.stockReserve,
+        stockReserveApres: produit.stockReserve,
+      });
+
+      totalArticles += quantite;
+    }
+
+    await decrementerConsommables(totalArticles);
+
+    res.status(201).json({
+      message: "Vente mixte enregistrée",
+      totalArticles,
+      montantCashCentimes: cashPart,
+      montantCarteCentimes: cartePart,
+    });
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de l'enregistrement de la vente mixte" });
+  }
+});
+
 router.get("/reporting/daily", async (req, res) => {
   try {
     const ventes = await db
@@ -429,6 +534,8 @@ router.get("/reporting/daily", async (req, res) => {
         quantiteVendue: ventesTable.quantiteVendue,
         typePaiement: ventesTable.typePaiement,
         montantCentimes: ventesTable.montantCentimes,
+        montantCashCentimes: ventesTable.montantCashCentimes,
+        montantCarteCentimes: ventesTable.montantCarteCentimes,
         createdAt: ventesTable.createdAt,
         couleur: produitsTable.couleur,
         prixCentimes: produitsTable.prixCentimes,
@@ -470,7 +577,10 @@ router.get("/reporting/daily", async (req, res) => {
       const day = dayMap.get(dateKey)!;
       day.totalCentimes += v.montantCentimes;
       day.totalArticles += v.quantiteVendue;
-      if (v.typePaiement === "CASH") {
+      if (v.typePaiement === "MIXTE") {
+        day.cashCentimes += v.montantCashCentimes ?? 0;
+        day.carteCentimes += v.montantCarteCentimes ?? 0;
+      } else if (v.typePaiement === "CASH") {
         day.cashCentimes += v.montantCentimes;
       } else {
         day.carteCentimes += v.montantCentimes;
@@ -699,6 +809,8 @@ router.get("/reporting/hebdo", async (req, res) => {
       .select({
         quantiteVendue: ventesTable.quantiteVendue,
         montantCentimes: ventesTable.montantCentimes,
+        montantCashCentimes: ventesTable.montantCashCentimes,
+        montantCarteCentimes: ventesTable.montantCarteCentimes,
         typePaiement: ventesTable.typePaiement,
         createdAt: ventesTable.createdAt,
       })
@@ -721,7 +833,10 @@ router.get("/reporting/hebdo", async (req, res) => {
       const w = weekMap.get(weekKey)!;
       w.totalCentimes += v.montantCentimes;
       w.articles += v.quantiteVendue;
-      if (v.typePaiement === "CASH") w.cashCentimes += v.montantCentimes;
+      if (v.typePaiement === "MIXTE") {
+        w.cashCentimes += v.montantCashCentimes ?? 0;
+        w.carteCentimes += v.montantCarteCentimes ?? 0;
+      } else if (v.typePaiement === "CASH") w.cashCentimes += v.montantCentimes;
       else w.carteCentimes += v.montantCentimes;
     }
 
@@ -749,6 +864,8 @@ router.get("/reporting/mensuel", async (req, res) => {
       .select({
         quantiteVendue: ventesTable.quantiteVendue,
         montantCentimes: ventesTable.montantCentimes,
+        montantCashCentimes: ventesTable.montantCashCentimes,
+        montantCarteCentimes: ventesTable.montantCarteCentimes,
         typePaiement: ventesTable.typePaiement,
         createdAt: ventesTable.createdAt,
       })
@@ -768,7 +885,10 @@ router.get("/reporting/mensuel", async (req, res) => {
       const m = monthMap.get(monthKey)!;
       m.totalCentimes += v.montantCentimes;
       m.articles += v.quantiteVendue;
-      if (v.typePaiement === "CASH") m.cashCentimes += v.montantCentimes;
+      if (v.typePaiement === "MIXTE") {
+        m.cashCentimes += v.montantCashCentimes ?? 0;
+        m.carteCentimes += v.montantCarteCentimes ?? 0;
+      } else if (v.typePaiement === "CASH") m.cashCentimes += v.montantCentimes;
       else m.carteCentimes += v.montantCentimes;
     }
 

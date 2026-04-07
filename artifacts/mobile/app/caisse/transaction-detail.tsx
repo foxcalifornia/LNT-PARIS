@@ -141,7 +141,8 @@ function TransactionDetailContent({
 }) {
   const insets = useSafeAreaInsets();
   const isCash = t.typePaiement === "CASH";
-  const paymentColor = isCash ? COLORS.cash : COLORS.card_payment;
+  const isMixte = t.typePaiement === "MIXTE";
+  const paymentColor = isCash ? COLORS.cash : isMixte ? "#8B5CF6" : COLORS.card_payment;
 
   const totalWithoutPromo = t.articles.reduce(
     (sum, a) => sum + a.montantCentimes,
@@ -169,12 +170,12 @@ function TransactionDetailContent({
         <View style={styles.cardHeader}>
           <View style={[styles.paymentBadge, { backgroundColor: paymentColor + "18" }]}>
             <Feather
-              name={isCash ? "dollar-sign" : "credit-card"}
+              name={isCash ? "dollar-sign" : isMixte ? "layers" : "credit-card"}
               size={16}
               color={paymentColor}
             />
             <Text style={[styles.paymentBadgeText, { color: paymentColor }]}>
-              {isCash ? "Cash" : "Carte bancaire"}
+              {isCash ? "Cash" : isMixte ? "Mixte" : "Carte bancaire"}
             </Text>
           </View>
           <Text style={styles.heure}>{t.heure}</Text>

@@ -26,6 +26,8 @@ export const ventesTable = pgTable("ventes", {
   quantiteVendue: integer("quantite_vendue").notNull(),
   typePaiement: text("type_paiement").notNull(),
   montantCentimes: integer("montant_centimes").notNull().default(0),
+  montantCashCentimes: integer("montant_cash_centimes"),
+  montantCarteCentimes: integer("montant_carte_centimes"),
   remiseCentimes: integer("remise_centimes").notNull().default(0),
   remiseType: text("remise_type"),
   commentaire: text("commentaire"),
