@@ -17,7 +17,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.lntparis.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "LNT Paris uses your location to identify the current sales location during a point-of-sale session. For example, your GPS coordinates are used to display the store's address on the sales receipt and session summary."
       }
     },
     "android": {
