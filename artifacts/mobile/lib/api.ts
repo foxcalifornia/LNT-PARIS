@@ -39,6 +39,7 @@ export type Collection = {
   id: number;
   nom: string;
   description: string | null;
+  imageUrl: string | null;
   createdAt: string;
 };
 
@@ -231,6 +232,11 @@ export const api = {
     createCollection: (data: { nom: string; description?: string | null }) =>
       request<Collection>("/collections", {
         method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateCollection: (id: number, data: { imageUrl?: string | null }) =>
+      request<Collection>(`/collections/${id}`, {
+        method: "PUT",
         body: JSON.stringify(data),
       }),
     deleteCollection: (id: number) =>

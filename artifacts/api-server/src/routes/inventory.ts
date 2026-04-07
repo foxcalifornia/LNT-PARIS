@@ -48,6 +48,21 @@ router.post("/collections", async (req, res) => {
   }
 });
 
+router.put("/collections/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { imageUrl } = req.body as { imageUrl?: string | null };
+    const data: { imageUrl?: string | null } = {};
+    if (imageUrl !== undefined) data.imageUrl = imageUrl;
+    const [updated] = await db.update(collectionsTable).set(data).where(eq(collectionsTable.id, id)).returning();
+    if (!updated) { res.status(404).json({ error: "Collection non trouvée" }); return; }
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: "Erreur lors de la mise à jour" });
+  }
+});
+
 router.delete("/collections/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);

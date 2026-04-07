@@ -213,6 +213,7 @@ export default function InventaireScreen() {
                 onToggle={() => setExpandedId(expandedId === col.id ? null : col.id)}
                 onDelete={() => handleDeleteCollection(col.id, col.nom)}
                 onSelectProduit={(p, nom) => setSelectedProduit({ produit: p, collectionNom: nom })}
+                isAdmin={isAdmin}
               />
             ))
           )}
@@ -271,14 +272,47 @@ type CollectionCardProps = {
   onToggle: () => void;
   onDelete: () => void;
   onSelectProduit: (produit: Produit, collectionNom: string) => void;
+  isAdmin: boolean;
 };
 
-function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProduit }: CollectionCardProps) {
+function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProduit, isAdmin }: CollectionCardProps) {
   const queryClient = useQueryClient();
   const [showAddProduit, setShowAddProduit] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState(collection.imageUrl ?? "");
+
+  useEffect(() => {
+    setImageUrlInput(collection.imageUrl ?? "");
+  }, [collection.imageUrl]);
 
   const totalBoutique = collection.produits.reduce((s, p) => s + p.quantite, 0);
   const totalReserve = collection.produits.reduce((s, p) => s + p.stockReserve, 0);
+
+  const collectionImageMutation = useMutation({
+    mutationFn: (imageUrl: string | null) => api.inventory.updateCollection(collection.id, { imageUrl }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const handleSaveCollectionImageUrl = () => {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    collectionImageMutation.mutate(url);
+  };
+
+  const handleRemoveCollectionImage = () => {
+    Alert.alert("Supprimer l'image ?", "L'image de la collection sera supprimée.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer", style: "destructive", onPress: () => {
+          collectionImageMutation.mutate(null);
+          setImageUrlInput("");
+        }
+      },
+    ]);
+  };
 
   const deleteProduitMutation = useMutation({
     mutationFn: api.inventory.deleteProduit,
@@ -304,9 +338,13 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
     <View style={styles.collectionCard}>
       <Pressable onPress={onToggle} style={styles.collectionHeader}>
         <View style={styles.collectionHeaderLeft}>
-          <View style={styles.collectionIcon}>
-            <Feather name="layers" size={18} color={COLORS.accent} />
-          </View>
+          {collection.imageUrl ? (
+            <Image source={{ uri: collection.imageUrl }} style={styles.collectionThumb} resizeMode="cover" />
+          ) : (
+            <View style={styles.collectionIcon}>
+              <Feather name="layers" size={18} color={COLORS.accent} />
+            </View>
+          )}
           <View>
             <Text style={styles.collectionName}>{collection.nom}</Text>
             <Text style={styles.collectionMeta}>
@@ -355,6 +393,68 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
             <Feather name="plus" size={16} color={COLORS.accent} />
             <Text style={styles.addProduitText}>Ajouter un produit</Text>
           </Pressable>
+
+          {isAdmin && (
+            <View style={styles.collectionImageSection}>
+              <View style={styles.imageSectionHeader}>
+                <Feather name="image" size={14} color={COLORS.textSecondary} />
+                <Text style={styles.imageSectionTitle}>Image de la collection</Text>
+              </View>
+
+              {collection.imageUrl ? (
+                <Image source={{ uri: collection.imageUrl }} style={styles.collectionImagePreview} resizeMode="cover" />
+              ) : (
+                <View style={[styles.collectionImagePreview, styles.imagePlaceholder]}>
+                  <Feather name="image" size={24} color={COLORS.border} />
+                  <Text style={styles.imagePlaceholderText}>Aucune image</Text>
+                </View>
+              )}
+
+              <TextInput
+                style={styles.imageUrlInput}
+                value={imageUrlInput}
+                onChangeText={setImageUrlInput}
+                placeholder="https://example.com/image.jpg"
+                placeholderTextColor={COLORS.textSecondary}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="done"
+                onSubmitEditing={handleSaveCollectionImageUrl}
+              />
+
+              <View style={styles.imageActions}>
+                <Pressable
+                  style={[
+                    styles.imageBtn,
+                    { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent },
+                    (!imageUrlInput.trim() || imageUrlInput.trim() === collection.imageUrl) && { opacity: 0.4 },
+                  ]}
+                  onPress={handleSaveCollectionImageUrl}
+                  disabled={collectionImageMutation.isPending || !imageUrlInput.trim() || imageUrlInput.trim() === collection.imageUrl}
+                >
+                  {collectionImageMutation.isPending ? (
+                    <ActivityIndicator size="small" color={COLORS.accent} />
+                  ) : (
+                    <>
+                      <Feather name="check" size={14} color={COLORS.accent} />
+                      <Text style={[styles.imageBtnText, { color: COLORS.accent }]}>Enregistrer</Text>
+                    </>
+                  )}
+                </Pressable>
+                {collection.imageUrl ? (
+                  <Pressable
+                    style={[styles.imageBtn, { backgroundColor: COLORS.danger + "18", borderColor: COLORS.danger }]}
+                    onPress={handleRemoveCollectionImage}
+                    disabled={collectionImageMutation.isPending}
+                  >
+                    <Feather name="trash-2" size={14} color={COLORS.danger} />
+                    <Text style={[styles.imageBtnText, { color: COLORS.danger }]}>Supprimer</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -1904,6 +2004,25 @@ const styles = StyleSheet.create({
     width: 44, height: 44, borderRadius: 12,
     backgroundColor: "#FDF8F0",
     justifyContent: "center", alignItems: "center",
+  },
+  collectionThumb: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: COLORS.border,
+  },
+  collectionImageSection: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.card,
+    gap: 10,
+  },
+  collectionImagePreview: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: COLORS.background,
   },
   collectionName: { fontSize: 16, fontFamily: "Inter_700Bold", color: COLORS.text, letterSpacing: -0.2 },
   collectionMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: COLORS.textSecondary, marginTop: 2 },

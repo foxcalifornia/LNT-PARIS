@@ -6,6 +6,7 @@ export const collectionsTable = pgTable("collections", {
   id: serial("id").primaryKey(),
   nom: text("nom").notNull(),
   description: text("description"),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
