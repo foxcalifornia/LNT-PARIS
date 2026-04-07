@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React, { useState, useMemo } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -638,8 +639,15 @@ function ProduitsView({
                   isEmpty && { opacity: 0.55 },
                 ]}
               >
-                {/* Color swatch */}
+                {/* Color swatch / image */}
                 <View style={[styles.productSquareSwatch, { backgroundColor: colorHex }]}>
+                  {p.imageUrl ? (
+                    <Image
+                      source={{ uri: p.imageUrl }}
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                    />
+                  ) : null}
                   {isSelected && (
                     <View style={styles.productSquareBadge}>
                       <Text style={styles.productSquareBadgeText}>{cartQty}</Text>

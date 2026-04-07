@@ -78,7 +78,7 @@ router.post("/produits", async (req, res) => {
 router.put("/produits/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { quantite, couleur, prixCentimes, stockMinimum, stockReserve } = req.body;
+    const { quantite, couleur, prixCentimes, stockMinimum, stockReserve, imageUrl } = req.body;
 
     const updateData: {
       quantite?: number;
@@ -86,12 +86,14 @@ router.put("/produits/:id", async (req, res) => {
       prixCentimes?: number;
       stockMinimum?: number;
       stockReserve?: number;
+      imageUrl?: string | null;
     } = {};
     if (quantite !== undefined) updateData.quantite = quantite;
     if (couleur !== undefined) updateData.couleur = couleur;
     if (prixCentimes !== undefined) updateData.prixCentimes = prixCentimes;
     if (stockMinimum !== undefined) updateData.stockMinimum = stockMinimum;
     if (stockReserve !== undefined) updateData.stockReserve = stockReserve;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
 
     const [produit] = await db
       .update(produitsTable)

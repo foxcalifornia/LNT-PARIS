@@ -1,10 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { router } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -443,10 +446,12 @@ type TransferDirection = "reserve_to_boutique" | "boutique_to_reserve";
 
 function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess }: ProduitStockSheetProps) {
   const queryClient = useQueryClient();
+  const { isAdmin } = useAuth();
   const [openSection, setOpenSection] = useState<SheetSection>(null);
   const [inputVal, setInputVal] = useState("");
   const [transferDirection, setTransferDirection] = useState<TransferDirection>("reserve_to_boutique");
   const [transferComment, setTransferComment] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
     if (visible) { setOpenSection(null); setInputVal(""); setTransferDirection("reserve_to_boutique"); setTransferComment(""); }
@@ -492,6 +497,53 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
     onSuccess: onMutationSuccess,
     onError: (err: any) => Alert.alert("Erreur", err.message),
   });
+
+  const imageMutation = useMutation({
+    mutationFn: (imageUrl: string | null) => api.inventory.updateProduit(produit!.id, { imageUrl }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: (err: any) => Alert.alert("Erreur", err.message),
+  });
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission refusée", "L'accès à la galerie est requis.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setImageUploading(true);
+    try {
+      const asset = result.assets[0];
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 600 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      if (!manipulated.base64) throw new Error("Échec de la conversion");
+      const dataUri = `data:image/jpeg;base64,${manipulated.base64}`;
+      imageMutation.mutate(dataUri);
+    } catch (e: any) {
+      Alert.alert("Erreur", e.message || "Impossible de traiter l'image");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    Alert.alert("Supprimer l'image ?", "L'image du produit sera supprimée.", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Supprimer", style: "destructive", onPress: () => imageMutation.mutate(null) },
+    ]);
+  };
 
   if (!produit) return null;
 
@@ -821,6 +873,65 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
                 {prixMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer le prix</Text>}
               </Pressable>
             </SheetActionRow>
+
+            {isAdmin && (
+              <View style={styles.imageSection}>
+                <View style={styles.imageSectionHeader}>
+                  <Feather name="image" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.imageSectionTitle}>Image du produit</Text>
+                </View>
+
+                {produit.imageUrl ? (
+                  <View style={styles.imagePreviewWrap}>
+                    <Image
+                      source={{ uri: produit.imageUrl }}
+                      style={styles.imagePreview}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.imageActions}>
+                      <Pressable
+                        style={[styles.imageBtn, { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent }]}
+                        onPress={handlePickImage}
+                        disabled={imageUploading || imageMutation.isPending}
+                      >
+                        {imageUploading ? (
+                          <ActivityIndicator size="small" color={COLORS.accent} />
+                        ) : (
+                          <>
+                            <Feather name="refresh-cw" size={14} color={COLORS.accent} />
+                            <Text style={[styles.imageBtnText, { color: COLORS.accent }]}>Changer</Text>
+                          </>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        style={[styles.imageBtn, { backgroundColor: COLORS.danger + "18", borderColor: COLORS.danger }]}
+                        onPress={handleRemoveImage}
+                        disabled={imageUploading || imageMutation.isPending}
+                      >
+                        <Feather name="trash-2" size={14} color={COLORS.danger} />
+                        <Text style={[styles.imageBtnText, { color: COLORS.danger }]}>Supprimer</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.imageUploadBtn}
+                    onPress={handlePickImage}
+                    disabled={imageUploading || imageMutation.isPending}
+                  >
+                    {imageUploading ? (
+                      <ActivityIndicator color={COLORS.accent} />
+                    ) : (
+                      <>
+                        <Feather name="upload" size={22} color={COLORS.accent} />
+                        <Text style={styles.imageUploadText}>Ajouter une image</Text>
+                        <Text style={styles.imageUploadHint}>JPG · PNG · WEBP · max 5 MB</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            )}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -2370,5 +2481,78 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+  },
+
+  imageSection: {
+    marginTop: 8,
+    marginBottom: 8,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+  },
+  imageSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  imageSectionTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+  },
+  imagePreviewWrap: {
+    padding: 12,
+    gap: 12,
+  },
+  imagePreview: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: COLORS.background,
+  },
+  imageActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  imageBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  imageBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  imageUploadBtn: {
+    margin: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.accent,
+    borderStyle: "dashed",
+    paddingVertical: 28,
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: COLORS.accent + "08",
+  },
+  imageUploadText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.accent,
+  },
+  imageUploadHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
   },
 });

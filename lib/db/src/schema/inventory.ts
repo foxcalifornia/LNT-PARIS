@@ -17,6 +17,7 @@ export const produitsTable = pgTable("produits", {
   stockReserve: integer("stock_reserve").notNull().default(0),
   prixCentimes: integer("prix_centimes").notNull().default(0),
   stockMinimum: integer("stock_minimum").notNull().default(0),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

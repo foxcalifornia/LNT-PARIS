@@ -50,6 +50,7 @@ export type Produit = {
   stockReserve: number;
   prixCentimes: number;
   stockMinimum: number;
+  imageUrl: string | null;
   createdAt: string;
 };
 
@@ -239,7 +240,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    updateProduit: (id: number, data: { quantite?: number; couleur?: string; prixCentimes?: number; stockMinimum?: number; stockReserve?: number }) =>
+    updateProduit: (id: number, data: { quantite?: number; couleur?: string; prixCentimes?: number; stockMinimum?: number; stockReserve?: number; imageUrl?: string | null }) =>
       request<Produit>(`/produits/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
