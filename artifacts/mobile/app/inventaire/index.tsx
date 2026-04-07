@@ -401,15 +401,6 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
                 <Text style={styles.imageSectionTitle}>Image de la collection</Text>
               </View>
 
-              {collection.imageUrl ? (
-                <Image source={{ uri: collection.imageUrl }} style={styles.collectionImagePreview} resizeMode="cover" />
-              ) : (
-                <View style={[styles.collectionImagePreview, styles.imagePlaceholder]}>
-                  <Feather name="image" size={24} color={COLORS.border} />
-                  <Text style={styles.imagePlaceholderText}>Aucune image</Text>
-                </View>
-              )}
-
               <TextInput
                 style={styles.imageUrlInput}
                 value={imageUrlInput}
