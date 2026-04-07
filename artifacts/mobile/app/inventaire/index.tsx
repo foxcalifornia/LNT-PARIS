@@ -581,6 +581,7 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[styles.formSheet, { paddingBottom: 32 }]}>
           <View style={styles.handle} />
 
@@ -634,7 +635,7 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
             </View>
           )}
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 4 }}>
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 4 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             {/* Transfert bidirectionnel boutique ↔ réserve */}
             <SheetActionRow
               icon="repeat"
