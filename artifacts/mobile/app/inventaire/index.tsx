@@ -1,7 +1,5 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as ImagePicker from "expo-image-picker";
-import * as ImageManipulator from "expo-image-manipulator";
 import { router } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
@@ -451,10 +449,16 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
   const [inputVal, setInputVal] = useState("");
   const [transferDirection, setTransferDirection] = useState<TransferDirection>("reserve_to_boutique");
   const [transferComment, setTransferComment] = useState("");
-  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState("");
 
   useEffect(() => {
-    if (visible) { setOpenSection(null); setInputVal(""); setTransferDirection("reserve_to_boutique"); setTransferComment(""); }
+    if (visible) {
+      setOpenSection(null);
+      setInputVal("");
+      setTransferDirection("reserve_to_boutique");
+      setTransferComment("");
+      setImageUrlInput(produit?.imageUrl ?? "");
+    }
   }, [visible, produit?.id]);
 
   const onMutationSuccess = () => {
@@ -507,41 +511,21 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
     onError: (err: any) => Alert.alert("Erreur", err.message),
   });
 
-  const handlePickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission refusée", "L'accès à la galerie est requis.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    setImageUploading(true);
-    try {
-      const asset = result.assets[0];
-      const manipulated = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 600 } }],
-        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-      if (!manipulated.base64) throw new Error("Échec de la conversion");
-      const dataUri = `data:image/jpeg;base64,${manipulated.base64}`;
-      imageMutation.mutate(dataUri);
-    } catch (e: any) {
-      Alert.alert("Erreur", e.message || "Impossible de traiter l'image");
-    } finally {
-      setImageUploading(false);
-    }
+  const handleSaveImageUrl = () => {
+    const url = imageUrlInput.trim();
+    if (!url) return;
+    imageMutation.mutate(url);
   };
 
   const handleRemoveImage = () => {
     Alert.alert("Supprimer l'image ?", "L'image du produit sera supprimée.", [
       { text: "Annuler", style: "cancel" },
-      { text: "Supprimer", style: "destructive", onPress: () => imageMutation.mutate(null) },
+      {
+        text: "Supprimer", style: "destructive", onPress: () => {
+          imageMutation.mutate(null);
+          setImageUrlInput("");
+        }
+      },
     ]);
   };
 
@@ -881,55 +865,64 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
                   <Text style={styles.imageSectionTitle}>Image du produit</Text>
                 </View>
 
-                {produit.imageUrl ? (
-                  <View style={styles.imagePreviewWrap}>
+                <View style={styles.imagePreviewWrap}>
+                  {produit.imageUrl ? (
                     <Image
                       source={{ uri: produit.imageUrl }}
                       style={styles.imagePreview}
                       resizeMode="cover"
                     />
-                    <View style={styles.imageActions}>
-                      <Pressable
-                        style={[styles.imageBtn, { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent }]}
-                        onPress={handlePickImage}
-                        disabled={imageUploading || imageMutation.isPending}
-                      >
-                        {imageUploading ? (
-                          <ActivityIndicator size="small" color={COLORS.accent} />
-                        ) : (
-                          <>
-                            <Feather name="refresh-cw" size={14} color={COLORS.accent} />
-                            <Text style={[styles.imageBtnText, { color: COLORS.accent }]}>Changer</Text>
-                          </>
-                        )}
-                      </Pressable>
+                  ) : (
+                    <View style={[styles.imagePreview, styles.imagePlaceholder]}>
+                      <Feather name="image" size={32} color={COLORS.border} />
+                      <Text style={styles.imagePlaceholderText}>Aucune image</Text>
+                    </View>
+                  )}
+
+                  <TextInput
+                    style={styles.imageUrlInput}
+                    value={imageUrlInput}
+                    onChangeText={setImageUrlInput}
+                    placeholder="https://example.com/image.jpg"
+                    placeholderTextColor={COLORS.textSecondary}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSaveImageUrl}
+                  />
+
+                  <View style={styles.imageActions}>
+                    <Pressable
+                      style={[
+                        styles.imageBtn,
+                        { backgroundColor: COLORS.accent + "18", borderColor: COLORS.accent },
+                        (!imageUrlInput.trim() || imageUrlInput.trim() === produit.imageUrl) && { opacity: 0.4 },
+                      ]}
+                      onPress={handleSaveImageUrl}
+                      disabled={imageMutation.isPending || !imageUrlInput.trim() || imageUrlInput.trim() === produit.imageUrl}
+                    >
+                      {imageMutation.isPending ? (
+                        <ActivityIndicator size="small" color={COLORS.accent} />
+                      ) : (
+                        <>
+                          <Feather name="check" size={14} color={COLORS.accent} />
+                          <Text style={[styles.imageBtnText, { color: COLORS.accent }]}>Enregistrer</Text>
+                        </>
+                      )}
+                    </Pressable>
+                    {produit.imageUrl ? (
                       <Pressable
                         style={[styles.imageBtn, { backgroundColor: COLORS.danger + "18", borderColor: COLORS.danger }]}
                         onPress={handleRemoveImage}
-                        disabled={imageUploading || imageMutation.isPending}
+                        disabled={imageMutation.isPending}
                       >
                         <Feather name="trash-2" size={14} color={COLORS.danger} />
                         <Text style={[styles.imageBtnText, { color: COLORS.danger }]}>Supprimer</Text>
                       </Pressable>
-                    </View>
+                    ) : null}
                   </View>
-                ) : (
-                  <Pressable
-                    style={styles.imageUploadBtn}
-                    onPress={handlePickImage}
-                    disabled={imageUploading || imageMutation.isPending}
-                  >
-                    {imageUploading ? (
-                      <ActivityIndicator color={COLORS.accent} />
-                    ) : (
-                      <>
-                        <Feather name="upload" size={22} color={COLORS.accent} />
-                        <Text style={styles.imageUploadText}>Ajouter une image</Text>
-                        <Text style={styles.imageUploadHint}>JPG · PNG · WEBP · max 5 MB</Text>
-                      </>
-                    )}
-                  </Pressable>
-                )}
+                </View>
               </View>
             )}
           </ScrollView>
@@ -2534,25 +2527,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
-  imageUploadBtn: {
-    margin: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.accent,
-    borderStyle: "dashed",
-    paddingVertical: 28,
+  imagePlaceholder: {
+    justifyContent: "center",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.accent + "08",
+    backgroundColor: COLORS.background,
+    gap: 8,
   },
-  imageUploadText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: COLORS.accent,
-  },
-  imageUploadHint: {
-    fontSize: 12,
+  imagePlaceholderText: {
+    fontSize: 13,
     fontFamily: "Inter_400Regular",
     color: COLORS.textSecondary,
+  },
+  imageUrlInput: {
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.text,
+    backgroundColor: COLORS.background,
   },
 });
