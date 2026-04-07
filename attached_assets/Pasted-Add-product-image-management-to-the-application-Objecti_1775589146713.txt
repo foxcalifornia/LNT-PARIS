@@ -1,0 +1,97 @@
+Add product image management to the application.
+
+Objective:
+Allow the admin to upload, view, and modify a product picture from the inventory section, and display the product image in the product view during sales.
+
+1. Database changes
+
+Add a field to the products table:
+
+image_url
+
+This field will store the URL or path of the product image.
+
+Example:
+products
+- id
+- name
+- collection_id
+- price
+- image_url
+- created_at
+
+The image should be stored in a storage service (Supabase Storage or local uploads depending on the current architecture).
+
+2. Inventory section – product editing
+
+In the Admin Inventory section, inside the product management screen:
+
+Add a new section called:
+Product Image
+
+Features:
+- Upload image
+- Replace image
+- Delete image
+
+Interface:
+- show current product image if one exists
+- button "Upload Image"
+- button "Change Image"
+- button "Remove Image"
+
+Accepted formats:
+- JPG
+- PNG
+- WEBP
+
+Limit file size to a reasonable value (e.g., 2–5 MB).
+
+When an image is uploaded:
+- store the file
+- save the image URL in the products table
+- refresh the product view.
+
+3. Product view in the sales interface
+
+When displaying products in the sales screen:
+
+Display the product image above or next to the product name.
+
+Example product card layout:
+
+[Product Image]
+
+Product Name  
+Price  
+Stock  
+
+If no image exists:
+- show a default placeholder image.
+
+4. Performance
+
+Images should:
+- load quickly
+- be resized or optimized if needed
+- use caching if possible.
+
+5. Mobile UX
+
+Ensure images display properly on iPhone:
+- square or rounded card format
+- responsive layout
+- maintain aspect ratio.
+
+6. Permissions
+
+Only Admin users should be able to:
+- upload images
+- modify images
+- delete images
+
+Vendors should only be able to view product images.
+
+7. Goal
+
+Products displayed in the sales screen should show a clear image to make product selection faster and easier for the seller.
