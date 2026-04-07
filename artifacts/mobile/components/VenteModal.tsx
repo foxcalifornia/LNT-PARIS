@@ -445,6 +445,14 @@ function CollectionsView({
     freeCountByProduct.set(fd.produitId, fd.count);
   }
 
+  const { isTablet } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
+  const numCols = isTablet ? 3 : 2;
+  const PADDING = 12;
+  const GAP = 10;
+  const containerWidth = Math.min(screenWidth, MAX_MODAL_WIDTH);
+  const colCardWidth = Math.floor((containerWidth - PADDING * 2 - GAP * (numCols - 1)) / numCols);
+
   return (
     <View style={styles.flex}>
       <View style={styles.searchBar}>
@@ -462,7 +470,7 @@ function CollectionsView({
 
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.gridContent, { padding: PADDING }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -497,51 +505,58 @@ function CollectionsView({
             {collections.length === 0 && (
               <Text style={styles.emptyText}>Aucune collection disponible</Text>
             )}
-            {collections.map((col) => {
-              const available = col.produits.filter((p) => p.quantite > 0).length;
-              const inCart = cart
-                .filter((i) => i.produit.collectionNom === col.nom)
-                .reduce((s, i) => s + i.quantite, 0);
-              const hasStock = available > 0;
-              return (
-                <Pressable
-                  key={col.id}
-                  style={({ pressed }) => [
-                    styles.collectionCard,
-                    !hasStock && styles.collectionCardDisabled,
-                    { opacity: pressed && hasStock ? 0.88 : 1 },
-                  ]}
-                  onPress={() => hasStock && onOpen(col)}
-                  disabled={!hasStock}
-                >
-                  <View style={[styles.collectionCardIcon, { backgroundColor: COLORS.accent + "18" }]}>
-                    <Feather name="layers" size={22} color={COLORS.accent} />
-                  </View>
-                  <View style={styles.collectionCardContent}>
-                    <Text style={[styles.collectionCardName, !hasStock && { color: COLORS.textSecondary }]}>
-                      {col.nom}
-                    </Text>
-                    <Text style={styles.collectionCardSub}>
-                      {available > 0
-                        ? `${available} modèle${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""}`
-                        : "Rupture de stock"}
-                    </Text>
-                  </View>
-                  <View style={styles.collectionCardRight}>
-                    {inCart > 0 && (
-                      <View style={styles.cartBadge}>
-                        <Text style={styles.cartBadgeText}>{inCart}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {collections.map((col, idx) => {
+                const available = col.produits.filter((p) => p.quantite > 0).length;
+                const inCart = cart
+                  .filter((i) => i.produit.collectionNom === col.nom)
+                  .reduce((s, i) => s + i.quantite, 0);
+                const hasStock = available > 0;
+                const colPos = idx % numCols;
+                const marginRight = colPos < numCols - 1 ? GAP : 0;
+                return (
+                  <Pressable
+                    key={col.id}
+                    style={({ pressed }) => [
+                      styles.collectionSquare,
+                      { width: colCardWidth, marginRight, marginBottom: GAP },
+                      inCart > 0 && { borderColor: COLORS.accent, borderWidth: 2.5 },
+                      !hasStock && { opacity: 0.45 },
+                      { opacity: pressed && hasStock ? 0.8 : (!hasStock ? 0.45 : 1) },
+                    ]}
+                    onPress={() => hasStock && onOpen(col)}
+                    disabled={!hasStock}
+                  >
+                    {/* Icon swatch */}
+                    <View style={styles.collectionSquareSwatch}>
+                      <View style={styles.collectionSquareIconWrap}>
+                        <Feather name="layers" size={32} color={COLORS.accent} />
                       </View>
-                    )}
-                    <Feather
-                      name="chevron-right"
-                      size={20}
-                      color={hasStock ? COLORS.textSecondary : COLORS.border}
-                    />
-                  </View>
-                </Pressable>
-              );
-            })}
+                      {inCart > 0 && (
+                        <View style={styles.collectionSquareBadge}>
+                          <Text style={styles.collectionSquareBadgeText}>{inCart}</Text>
+                        </View>
+                      )}
+                      {!hasStock && (
+                        <View style={styles.collectionSquareEmpty}>
+                          <Text style={styles.collectionSquareEmptyText}>Épuisé</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Info */}
+                    <View style={styles.collectionSquareInfo}>
+                      <Text style={styles.collectionSquareName} numberOfLines={2}>{col.nom}</Text>
+                      <Text style={styles.collectionSquareSub} numberOfLines={1}>
+                        {available > 0
+                          ? `${available} modèle${available > 1 ? "s" : ""}`
+                          : "Rupture"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </>
         )}
         <View style={{ height: totalItems > 0 ? 80 : 16 }} />
@@ -1198,6 +1213,83 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+
+  collectionSquare: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+  },
+  collectionSquareSwatch: {
+    width: "100%",
+    aspectRatio: 1.1,
+    backgroundColor: COLORS.accent + "14",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  collectionSquareIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.accent + "22",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  collectionSquareBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  collectionSquareBadgeText: {
+    color: "#fff",
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  collectionSquareEmpty: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    paddingVertical: 4,
+    alignItems: "center",
+  },
+  collectionSquareEmptyText: {
+    color: "#fff",
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  collectionSquareInfo: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 3,
+  },
+  collectionSquareName: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: COLORS.text,
+    letterSpacing: -0.2,
+  },
+  collectionSquareSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
   },
   cartBadge: {
     minWidth: 22,
