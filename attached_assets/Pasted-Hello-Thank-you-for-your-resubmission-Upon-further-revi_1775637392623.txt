@@ -1,0 +1,65 @@
+Hello,
+
+Thank you for your resubmission. Upon further review, we identified additional issues that need your attention. See below for more information.
+
+If you have any questions, we are here to help. Reply to this message in App Store Connect and let us know.
+
+Review Environment
+Submission ID: 28ca9eb9-2048-4a7a-86bf-5e9d8ba24c27
+Review date: April 08, 2026
+Review Device: iPhone 17 Pro Max and iPad Air 11-inch (M3)
+Version reviewed: 1.0
+
+Guideline 4 - Design
+
+Issue Description
+
+Parts of the app's user interface were crowded, laid out, or displayed in a way that made it difficult to use the app when reviewed on iPad Air 11-inch (M3) running iPadOS 26.4.
+
+Specifically, the parametres button was overlapped and hidden.
+
+Next Steps
+
+To resolve this issue, revise the app to ensure that the content and controls on the screen are easy to read and interact with.
+
+Note that users expect apps they download to function on all the devices where they are available. For example, apps that may be downloaded onto iPad devices should function as expected for iPad users. Learn more about supporting apps on compatible devices.
+
+Resources
+
+- Learn foundational design principles from Apple designers and the developer community.
+- See documentation for the UIKit framework.
+- Learn more about design requirements in guideline 4.
+Guideline 3.2 - Business
+
+Issue Description
+
+We found in our review that the app is intended to be used by a specific business or organization, including partners, clients, or employees, but you've selected public distribution on the App Store in App Store Connect. Since the App Store is intended for apps with a public audience, we recommend reviewing the other distribution options available to you through your Apple Developer Program Account. 
+
+If you believe our assessment is incorrect and the app is intended for a general, public audience, clarify why in your response to the questions provided below.
+
+Next Steps
+
+If the app is intended for use by a specific business or organization, review the other distribution options available for apps designed for specific businesses or organizations and choose a distribution option that works for the app and users. You can review these app distribution options on Apple Developer. 
+
+If you believe the app is intended for a general public audience, review the following questions and provide as much detailed information as you can for each question:
+
+1. Is the app restricted to users who are part of a single company or organization? This may include users of the company's partners, employees, and contractors.
+2. Is the app designed for use by a limited or specific group of companies or organizations? 
+- If yes, which companies or organizations use this app? 
+- If not, can any company or organization become a client and utilize this app?
+3. What features in the app, if any, are intended for use by the general public? The general public refers to a wide range of users who can discover, download, and use an app without invitation, pre-approved registration, or affiliation with a specific organization.
+4. How do users obtain an account?
+5. Is there any paid content in the app and if so who pays for it? For example, do users pay for opening an account or using certain features in the app?
+
+Resources 
+
+- Learn more about custom app distribution using Apple Business Manager or Apple School Manager.
+- Learn more about unlisted app distribution.
+
+
+Support
+- Reply to this message in your preferred language if you need assistance. If you need additional support, use the Contact Us module.
+- Consult with fellow developers and Apple engineers on the Apple Developer Forums.
+- Request an App Review Appointment at Meet with Apple to discuss your app's review. Appointments subject to availability during your local business hours on Tuesdays and Thursdays.
+- Provide feedback on this message and your review experience by completing a short survey.
+

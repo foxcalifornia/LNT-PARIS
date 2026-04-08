@@ -5,6 +5,7 @@ import React from "react";
 import {
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -88,11 +89,20 @@ export default function HomeScreen() {
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-      <View style={styles.centerWrapper}>
-        <View style={[styles.inner, contentMaxWidth ? { maxWidth: contentMaxWidth } : undefined]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 16 },
+          contentMaxWidth ? { alignItems: "center" } : undefined,
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.inner, contentMaxWidth ? { maxWidth: contentMaxWidth, width: "100%" } : undefined]}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <Text style={[styles.logoText, isTablet && styles.logoTextLg]}>LNT</Text>
@@ -147,7 +157,7 @@ export default function HomeScreen() {
             <Text style={styles.footerText}>© 2026 LNT Paris · Tous droits réservés</Text>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -201,13 +211,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  centerWrapper: {
+  scrollView: {
     flex: 1,
-    alignItems: "center",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    width: "100%",
   },
   inner: {
     flex: 1,
     width: "100%",
+    justifyContent: "space-between",
   },
   header: {
     paddingTop: 40,
@@ -271,9 +285,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   content: {
-    flex: 1,
     gap: 16,
-    justifyContent: "center",
+    paddingVertical: 8,
   },
   stackCol: {
     gap: 16,
@@ -350,6 +363,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   footer: {
+    paddingTop: 24,
     paddingBottom: 16,
     alignItems: "center",
     gap: 12,
