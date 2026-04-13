@@ -66,6 +66,15 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const pollStartRef = useRef<number>(0);
   const cartSnapshotRef = useRef<CartItem[]>([]);
 
+  type SplitState = "off" | "input" | "part1_creating" | "part1_waiting" | "part1_paid" | "part2_creating" | "part2_waiting" | "confirming" | "error";
+  const [splitState, setSplitState] = useState<SplitState>("off");
+  const [splitAmountInput, setSplitAmountInput] = useState("");
+  const [splitRef1, setSplitRef1] = useState<string | null>(null);
+  const [splitRef2, setSplitRef2] = useState<string | null>(null);
+  const [splitError, setSplitError] = useState<string | null>(null);
+  const splitPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const splitPollStartRef = useRef<number>(0);
+
   const promoRaw = computePromo(cart);
   const promo = promoEnabled ? promoRaw : { nbFree: 0, discountCentimes: 0, freeDetails: [] };
   const totalItems = cartTotalItems(cart);
@@ -92,10 +101,16 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
       setTerminalState("idle");
       setSaleReference(null);
       setTerminalError(null);
+      stopSplitPoll();
+      setSplitState("off");
+      setSplitAmountInput("");
+      setSplitRef1(null);
+      setSplitRef2(null);
+      setSplitError(null);
     }
   }, [visible]);
 
-  useEffect(() => () => stopPolling(), []);
+  useEffect(() => () => { stopPolling(); stopSplitPoll(); }, []);
 
   const startPolling = (ref: string, snap: CartItem[]) => {
     pollStartRef.current = Date.now();
@@ -157,6 +172,118 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
       } catch {
       }
     }, POLL_INTERVAL_MS);
+  };
+
+  const splitPart1Centimes = splitAmountInput
+    ? Math.min(Math.round(parseFloat(splitAmountInput.replace(",", ".")) * 100) || 0, totalFinal)
+    : 0;
+  const splitPart2Centimes = totalFinal - splitPart1Centimes;
+  const splitInputValid = splitPart1Centimes > 0 && splitPart1Centimes < totalFinal;
+
+  const stopSplitPoll = () => {
+    if (splitPollRef.current) { clearInterval(splitPollRef.current); splitPollRef.current = null; }
+  };
+
+  const resetSplit = () => {
+    stopSplitPoll();
+    setSplitState("off");
+    setSplitAmountInput("");
+    setSplitRef1(null);
+    setSplitRef2(null);
+    setSplitError(null);
+  };
+
+  const startSplitPoll = (ref: string, part: 1 | 2) => {
+    splitPollStartRef.current = Date.now();
+    splitPollRef.current = setInterval(async () => {
+      if (Date.now() - splitPollStartRef.current > MAX_POLL_MS) {
+        stopSplitPoll();
+        setSplitError("Délai d'attente dépassé (3 min). Vérifiez le terminal SumUp.");
+        setSplitState("error");
+        return;
+      }
+      try {
+        const result = await api.payments.getStatus(ref);
+        if (result.status === "PAID") {
+          stopSplitPoll();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          if (part === 1) {
+            setSplitRef1(ref);
+            setSplitState("part1_paid");
+          } else {
+            setSplitRef2(ref);
+            setSplitState("confirming");
+            try {
+              await api.payments.confirmMulti({
+                saleRef1: splitRef1!,
+                saleRef2: ref,
+                items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+                ...(remiseCentimes > 0 ? { remiseCentimes, remiseType } : {}),
+                ...(commentaire.trim() ? { commentaire: commentaire.trim() } : {}),
+              });
+              await onRefreshAfterVente();
+              setSuccessMode("carte");
+              setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
+              setSuccess(true);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              setTimeout(() => {
+                setSuccess(false); setSuccessMode(null); setSuccessSnapshot(null);
+                resetSplit(); onCartChange([]); onClose();
+              }, 2000);
+            } catch (err) {
+              setSplitError((err as Error).message ?? "Erreur lors de l'enregistrement");
+              setSplitState("error");
+            }
+          }
+        } else if (result.status === "FAILED" || result.status === "CANCELLED") {
+          stopSplitPoll();
+          setSplitError("Paiement refusé ou annulé par le terminal.");
+          setSplitState("error");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      } catch {}
+    }, POLL_INTERVAL_MS);
+  };
+
+  const handleSplitPart1 = async () => {
+    if (!splitInputValid || cart.length === 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSplitState("part1_creating");
+    setSplitError(null);
+    cartSnapshotRef.current = [...cart];
+    try {
+      const result = await api.payments.create({
+        montantCentimes: splitPart1Centimes,
+        description: `LNT Paris – Part 1/${formatPrix(splitPart1Centimes)}`,
+        items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+      });
+      setSplitState("part1_waiting");
+      startSplitPoll(result.saleReference, 1);
+    } catch (err) {
+      setSplitError((err as Error).message ?? "Impossible de contacter SumUp");
+      setSplitState("error");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const handleSplitPart2 = async () => {
+    if (!splitRef1 || cart.length === 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSplitState("part2_creating");
+    setSplitError(null);
+    try {
+      const result = await api.payments.create({
+        montantCentimes: splitPart2Centimes,
+        description: `LNT Paris – Part 2/${formatPrix(splitPart2Centimes)}`,
+        items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+      });
+      setSplitState("part2_waiting");
+      startSplitPoll(result.saleReference, 2);
+    } catch (err) {
+      setSplitError((err as Error).message ?? "Impossible de contacter SumUp");
+      setSplitState("error");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleCashPay = async () => {
@@ -301,7 +428,148 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   };
 
   const isInTerminalFlow = terminalState !== "idle";
+  const isSplitActive = splitState !== "off";
   const successColor = successMode === "carte" ? COLORS.card_payment : COLORS.cash;
+
+  const SPLIT_COLOR = "#8B5CF6";
+
+  const renderSplitView = () => {
+    if (splitState === "input") {
+      return (
+        <ScrollView contentContainerStyle={styles.terminalContainer} showsVerticalScrollIndicator={false}>
+          <View style={[styles.terminalIcon, { backgroundColor: SPLIT_COLOR + "15" }]}>
+            <Feather name="scissors" size={36} color={SPLIT_COLOR} />
+          </View>
+          <Text style={[styles.terminalTitle, { color: SPLIT_COLOR }]}>Paiement fractionné</Text>
+          <Text style={[styles.terminalSub, { marginBottom: 4 }]}>
+            Total : <Text style={{ fontWeight: "700", color: COLORS.text }}>{formatPrix(totalFinal)}</Text>
+          </Text>
+
+          <View style={styles.splitInputBlock}>
+            <Text style={styles.splitLabel}>Montant — Carte 1 (€)</Text>
+            <TextInput
+              style={styles.splitInput}
+              placeholder={`Ex: ${((totalFinal / 2) / 100).toFixed(2).replace(".", ",")} €`}
+              placeholderTextColor={COLORS.textSecondary}
+              value={splitAmountInput}
+              onChangeText={setSplitAmountInput}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            {splitInputValid && (
+              <View style={styles.splitPreviewRow}>
+                <View style={styles.splitPreviewCard}>
+                  <Feather name="credit-card" size={13} color={SPLIT_COLOR} />
+                  <Text style={[styles.splitPreviewText, { color: SPLIT_COLOR }]}>Carte 1 : {formatPrix(splitPart1Centimes)}</Text>
+                </View>
+                <View style={styles.splitPreviewCard}>
+                  <Feather name="credit-card" size={13} color={COLORS.card_payment} />
+                  <Text style={[styles.splitPreviewText, { color: COLORS.card_payment }]}>Carte 2 : {formatPrix(splitPart2Centimes)}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          <Pressable
+            style={[styles.splitActionBtn, { backgroundColor: SPLIT_COLOR }, !splitInputValid && { opacity: 0.4 }]}
+            onPress={handleSplitPart1}
+            disabled={!splitInputValid}
+          >
+            <Feather name="credit-card" size={18} color="#fff" />
+            <Text style={styles.splitActionBtnText}>Payer Carte 1 sur SumUp → {splitInputValid ? formatPrix(splitPart1Centimes) : ""}</Text>
+          </Pressable>
+          <Pressable style={styles.terminalCancelBtn} onPress={resetSplit}>
+            <Feather name="arrow-left" size={15} color={COLORS.textSecondary} />
+            <Text style={[styles.terminalCancelText, { color: COLORS.textSecondary }]}>Retour</Text>
+          </Pressable>
+        </ScrollView>
+      );
+    }
+
+    if (splitState === "part1_creating" || splitState === "part2_creating" || splitState === "confirming") {
+      const partLabel = splitState === "part2_creating" ? "Carte 2" : splitState === "confirming" ? "Enregistrement…" : "Carte 1";
+      return (
+        <View style={styles.terminalContainer}>
+          <ActivityIndicator size="large" color={SPLIT_COLOR} style={{ marginBottom: 16 }} />
+          <Text style={styles.terminalTitle}>{splitState === "confirming" ? "Finalisation…" : "Connexion au terminal…"}</Text>
+          <Text style={styles.terminalSub}>{splitState === "confirming" ? "Enregistrement de la vente" : `Envoi de la demande — ${partLabel}`}</Text>
+          {splitState !== "confirming" && (
+            <Text style={[styles.terminalAmount, { color: SPLIT_COLOR }]}>
+              {splitState === "part2_creating" ? formatPrix(splitPart2Centimes) : formatPrix(splitPart1Centimes)}
+            </Text>
+          )}
+        </View>
+      );
+    }
+
+    if (splitState === "part1_waiting" || splitState === "part2_waiting") {
+      const isPart2 = splitState === "part2_waiting";
+      const partAmount = isPart2 ? splitPart2Centimes : splitPart1Centimes;
+      const partLabel = isPart2 ? "Carte 2" : "Carte 1";
+      return (
+        <View style={styles.terminalContainer}>
+          {isPart2 && (
+            <View style={styles.splitPaidBadge}>
+              <Feather name="check-circle" size={14} color={COLORS.success} />
+              <Text style={styles.splitPaidBadgeText}>Carte 1 payée · {formatPrix(splitPart1Centimes)}</Text>
+            </View>
+          )}
+          <View style={[styles.terminalIcon, { backgroundColor: SPLIT_COLOR + "15" }]}>
+            <Feather name="credit-card" size={42} color={SPLIT_COLOR} />
+          </View>
+          <Text style={styles.terminalTitle}>{partLabel} — Paiement en cours</Text>
+          <Text style={[styles.terminalAmount, { color: SPLIT_COLOR }]}>{formatPrix(partAmount)}</Text>
+          <View style={styles.terminalAutoDetect}>
+            <ActivityIndicator size="small" color={SPLIT_COLOR} />
+            <Text style={[styles.terminalAutoDetectText, { color: SPLIT_COLOR }]}>Détection automatique en cours…</Text>
+          </View>
+          <Text style={styles.terminalSub}>Le client présente sa carte sur le terminal SumUp Solo</Text>
+        </View>
+      );
+    }
+
+    if (splitState === "part1_paid") {
+      return (
+        <View style={styles.terminalContainer}>
+          <View style={styles.splitPaidBadge}>
+            <Feather name="check-circle" size={14} color={COLORS.success} />
+            <Text style={styles.splitPaidBadgeText}>Carte 1 payée · {formatPrix(splitPart1Centimes)}</Text>
+          </View>
+          <View style={[styles.terminalIcon, { backgroundColor: COLORS.card_payment + "15" }]}>
+            <Feather name="credit-card" size={42} color={COLORS.card_payment} />
+          </View>
+          <Text style={styles.terminalTitle}>Maintenant Carte 2</Text>
+          <Text style={[styles.terminalAmount, { color: COLORS.card_payment }]}>{formatPrix(splitPart2Centimes)}</Text>
+          <Text style={styles.terminalSub}>Présentez la deuxième carte sur le terminal SumUp</Text>
+          <Pressable
+            style={[styles.splitActionBtn, { backgroundColor: COLORS.card_payment, marginTop: 12 }]}
+            onPress={handleSplitPart2}
+          >
+            <Feather name="credit-card" size={18} color="#fff" />
+            <Text style={styles.splitActionBtnText}>Payer Carte 2 sur SumUp → {formatPrix(splitPart2Centimes)}</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    if (splitState === "error") {
+      return (
+        <View style={styles.terminalContainer}>
+          <View style={[styles.terminalIcon, { backgroundColor: COLORS.danger + "15" }]}>
+            <Feather name="alert-circle" size={42} color={COLORS.danger} />
+          </View>
+          <Text style={[styles.terminalTitle, { color: COLORS.danger }]}>Paiement échoué</Text>
+          <Text style={[styles.terminalSub, { textAlign: "center" }]}>{splitError ?? "Une erreur est survenue."}</Text>
+          <Pressable style={styles.terminalRetryBtn} onPress={resetSplit}>
+            <Feather name="arrow-left" size={16} color={COLORS.card_payment} />
+            <Text style={styles.terminalRetryText}>Retour au panier</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return null;
+  };
 
   const renderTerminalView = () => {
     if (terminalState === "creating") {
@@ -416,29 +684,34 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={isInTerminalFlow ? undefined : onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={(isInTerminalFlow || (isSplitActive && splitState !== "input")) ? undefined : onClose}>
       <View style={[styles.overlay, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 24) }, isTablet && styles.overlayTablet]}>
         <View style={[styles.sheet, isTablet && styles.sheetTablet]}>
 
           <View style={styles.header}>
-            {isInTerminalFlow ? (
-              <View style={{ width: 36 }} />
+            <View style={{ width: 36 }} />
+            <Text style={styles.title}>
+              {isSplitActive
+                ? splitState === "input" ? "Paiement fractionné"
+                  : splitState === "part1_waiting" ? "Carte 1 — SumUp"
+                  : splitState === "part2_waiting" ? "Carte 2 — SumUp"
+                  : splitState === "part1_paid" ? "Carte 2 à payer"
+                  : splitState === "confirming" ? "Finalisation…"
+                  : splitState === "error" ? "Erreur"
+                  : "Paiement fractionné"
+                : isInTerminalFlow
+                  ? terminalState === "waiting" ? "Terminal SumUp"
+                    : terminalState === "creating" ? "SumUp"
+                    : "Paiement"
+                  : `Panier${totalItems > 0 ? ` · ${totalItems} article${totalItems > 1 ? "s" : ""}` : ""}`}
+            </Text>
+            {(!isInTerminalFlow && (!isSplitActive || splitState === "input" || splitState === "error")) ? (
+              <Pressable onPress={isSplitActive ? resetSplit : onClose} style={styles.closeBtn}>
+                <Feather name={isSplitActive ? "arrow-left" : "x"} size={18} color={COLORS.textSecondary} />
+              </Pressable>
             ) : (
               <View style={{ width: 36 }} />
             )}
-            <Text style={styles.title}>
-              {isInTerminalFlow
-                ? terminalState === "waiting" ? "Terminal SumUp"
-                  : terminalState === "creating" ? "SumUp"
-                  : "Paiement"
-                : `Panier${totalItems > 0 ? ` · ${totalItems} article${totalItems > 1 ? "s" : ""}` : ""}`}
-            </Text>
-            {!isInTerminalFlow && (
-              <Pressable onPress={onClose} style={styles.closeBtn}>
-                <Feather name="x" size={18} color={COLORS.textSecondary} />
-              </Pressable>
-            )}
-            {isInTerminalFlow && <View style={{ width: 36 }} />}
           </View>
 
           {success ? (
@@ -492,6 +765,8 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                 <Text style={[styles.shareBtnSuccessText, { color: COLORS.textSecondary }]}>Fermer</Text>
               </Pressable>
             </View>
+          ) : isSplitActive ? (
+            renderSplitView()
           ) : isInTerminalFlow ? (
             renderTerminalView()
           ) : cart.length === 0 ? (
@@ -726,6 +1001,13 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                     <Text style={styles.payBtnText}>Payer Carte</Text>
                   </Pressable>
                 </View>
+                <Pressable
+                  style={styles.splitBtn}
+                  onPress={() => { Haptics.selectionAsync(); setSplitState("input"); setSplitAmountInput(""); }}
+                >
+                  <Feather name="scissors" size={15} color={SPLIT_COLOR} />
+                  <Text style={styles.splitBtnText}>Paiement fractionné — 2 cartes</Text>
+                </Pressable>
               </View>
             </>
           )}
@@ -881,6 +1163,57 @@ const styles = StyleSheet.create({
   },
   terminalRetryText: {
     fontSize: 14, fontFamily: "Inter_600SemiBold", color: COLORS.card_payment,
+  },
+
+  splitBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    marginTop: 10, paddingVertical: 12, paddingHorizontal: 16,
+    borderRadius: 14, borderWidth: 1.5, borderColor: "#8B5CF640",
+    backgroundColor: "#8B5CF608",
+  },
+  splitBtnText: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#8B5CF6",
+  },
+  splitInputBlock: {
+    alignSelf: "stretch", gap: 8, marginTop: 8,
+  },
+  splitLabel: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold", color: COLORS.textSecondary,
+  },
+  splitInput: {
+    borderWidth: 1.5, borderColor: "#8B5CF640", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 16, fontFamily: "Inter_400Regular", color: COLORS.text,
+    backgroundColor: COLORS.background,
+  },
+  splitPreviewRow: {
+    flexDirection: "row", gap: 8, marginTop: 4,
+  },
+  splitPreviewCard: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: COLORS.background, borderRadius: 10, padding: 10,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
+  splitPreviewText: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold",
+  },
+  splitActionBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    alignSelf: "stretch", paddingVertical: 16, paddingHorizontal: 20,
+    borderRadius: 14, marginTop: 8,
+  },
+  splitActionBtnText: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  splitPaidBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: COLORS.success + "15", borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: COLORS.success + "30",
+    marginBottom: 8,
+  },
+  splitPaidBadgeText: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold", color: COLORS.success,
   },
 
   successContainer: {

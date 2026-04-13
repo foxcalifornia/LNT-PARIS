@@ -350,6 +350,18 @@ export const api = {
         "/payments/confirm",
         { method: "POST", body: JSON.stringify(data) }
       ),
+    confirmMulti: (data: {
+      saleRef1: string;
+      saleRef2: string;
+      items: { produitId: number; quantite: number }[];
+      remiseCentimes?: number;
+      remiseType?: string;
+      commentaire?: string;
+    }) =>
+      request<{ message: string }>(
+        "/payments/confirm-multi",
+        { method: "POST", body: JSON.stringify(data) }
+      ),
     cancel: (saleReference: string) =>
       request<{ message: string; saleReference: string }>(
         "/payments/cancel",

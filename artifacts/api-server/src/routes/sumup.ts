@@ -347,6 +347,99 @@ router.post("/confirm", async (req, res) => {
   }
 });
 
+router.post("/confirm-multi", async (req, res) => {
+  try {
+    const { saleRef1, saleRef2, items, remiseCentimes, remiseType, commentaire } = req.body as {
+      saleRef1: string;
+      saleRef2: string;
+      items: { produitId: number; quantite: number }[];
+      remiseCentimes?: number;
+      remiseType?: string;
+      commentaire?: string;
+    };
+
+    if (!saleRef1 || !saleRef2 || !items || items.length === 0) {
+      res.status(400).json({ error: "Données manquantes" });
+      return;
+    }
+
+    const [rec1] = await db.select().from(sumupCheckoutsTable).where(eq(sumupCheckoutsTable.saleReference, saleRef1));
+    const [rec2] = await db.select().from(sumupCheckoutsTable).where(eq(sumupCheckoutsTable.saleReference, saleRef2));
+
+    if (!rec1 || !rec2) {
+      res.status(404).json({ error: "Référence de paiement introuvable" });
+      return;
+    }
+
+    if (rec1.confirmedLocally === 1 && rec2.confirmedLocally === 1) {
+      res.json({ message: "Vente déjà enregistrée", saleRef1, saleRef2 });
+      return;
+    }
+
+    if (rec1.statut !== "PAID" && rec1.statut !== "CONFIRMED") {
+      res.status(402).json({ error: `Premier paiement non confirmé (${rec1.statut})` });
+      return;
+    }
+    if (rec2.statut !== "PAID" && rec2.statut !== "CONFIRMED") {
+      res.status(402).json({ error: `Deuxième paiement non confirmé (${rec2.statut})` });
+      return;
+    }
+
+    const remiseTotale = remiseCentimes ?? 0;
+    const nbItems = items.reduce((s, i) => s + i.quantite, 0);
+    let totalArticles = 0;
+
+    for (const item of items) {
+      const [produit] = await db
+        .select({ quantite: produitsTable.quantite, prixCentimes: produitsTable.prixCentimes, stockReserve: produitsTable.stockReserve })
+        .from(produitsTable)
+        .where(eq(produitsTable.id, item.produitId));
+
+      if (!produit) continue;
+
+      const montantBrut = produit.prixCentimes * item.quantite;
+      const remiseProportion = nbItems > 0 ? item.quantite / nbItems : 0;
+      const remiseItem = Math.round(remiseTotale * remiseProportion);
+      const montantCentimes = Math.max(0, montantBrut - remiseItem);
+      const newBoutique = Math.max(0, produit.quantite - item.quantite);
+
+      await db.insert(ventesTable).values({
+        produitId: item.produitId,
+        quantiteVendue: item.quantite,
+        typePaiement: "MULTI_CARTE",
+        montantCentimes,
+        montantCarteCentimes: montantCentimes,
+        remiseCentimes: remiseItem,
+        remiseType: remiseType ?? null,
+        commentaire: commentaire ?? null,
+        saleReference: saleRef1,
+      });
+
+      await db.update(produitsTable)
+        .set({ quantite: newBoutique })
+        .where(eq(produitsTable.id, item.produitId));
+
+      totalArticles += item.quantite;
+    }
+
+    await decrementerConsommables(totalArticles);
+
+    await db.update(sumupCheckoutsTable)
+      .set({ statut: "CONFIRMED", confirmedLocally: 1 })
+      .where(eq(sumupCheckoutsTable.saleReference, saleRef1));
+    await db.update(sumupCheckoutsTable)
+      .set({ statut: "CONFIRMED", confirmedLocally: 1 })
+      .where(eq(sumupCheckoutsTable.saleReference, saleRef2));
+
+    await logPayment({ saleReference: saleRef1, action: "multi_confirmed_locally", statut: "CONFIRMED" });
+
+    res.json({ message: "Vente multi-carte enregistrée", saleRef1, saleRef2 });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: String((err as Error).message) });
+  }
+});
+
 router.post("/cancel", async (req, res) => {
   try {
     const { saleReference } = req.body as { saleReference: string };
