@@ -17,14 +17,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { useAuth, type Role } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { api, type Stand } from "@/lib/api";
 
 const COLORS = Colors.light;
 const STAND_COLOR = "#8B5CF6";
 
-type LoginMode = "admin" | "vendeur" | "stand";
+type LoginMode = "admin" | "stand";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -89,8 +89,7 @@ export default function LoginScreen() {
     if (selectedMode === "stand" && selectedStand) {
       success = await loginStand(selectedStand.id, password);
     } else {
-      const role: Role = selectedMode === "admin" ? "admin" : "vendeur";
-      success = await login(role, password);
+      success = await login("admin", password);
     }
 
     setLoading(false);
@@ -107,15 +106,12 @@ export default function LoginScreen() {
   const modeLabel =
     selectedMode === "admin"
       ? "Admin"
-      : selectedMode === "vendeur"
-      ? "Vendeur"
       : selectedStand
       ? selectedStand.name
       : "Stand";
 
   const showPasswordSection =
     selectedMode === "admin" ||
-    selectedMode === "vendeur" ||
     (selectedMode === "stand" && selectedStand !== null);
 
   return (
@@ -162,17 +158,6 @@ export default function LoginScreen() {
                 </Pressable>
 
                 <Pressable
-                  style={[styles.roleCard, selectedMode === "vendeur" && styles.roleCardActiveVendeur]}
-                  onPress={() => selectMode("vendeur")}
-                >
-                  <View style={[styles.roleIcon, selectedMode === "vendeur" && styles.roleIconActiveVendeur]}>
-                    <Feather name="shopping-bag" size={20} color={selectedMode === "vendeur" ? "#fff" : COLORS.textSecondary} />
-                  </View>
-                  <Text style={[styles.roleLabel, selectedMode === "vendeur" && styles.roleLabelVendeur]}>Vendeur</Text>
-                  <Text style={[styles.roleDesc, selectedMode === "vendeur" && { color: COLORS.cash }]}>Caisse seule</Text>
-                </Pressable>
-
-                <Pressable
                   style={[styles.roleCard, selectedMode === "stand" && styles.roleCardActiveStand]}
                   onPress={() => selectMode("stand")}
                 >
@@ -180,7 +165,7 @@ export default function LoginScreen() {
                     <Feather name="map-pin" size={20} color={selectedMode === "stand" ? "#fff" : COLORS.textSecondary} />
                   </View>
                   <Text style={[styles.roleLabel, selectedMode === "stand" && styles.roleLabelStand]}>Stand</Text>
-                  <Text style={[styles.roleDesc, selectedMode === "stand" && { color: STAND_COLOR }]}>Par stand</Text>
+                  <Text style={[styles.roleDesc, selectedMode === "stand" && { color: STAND_COLOR }]}>Vendeur par stand</Text>
                 </Pressable>
               </View>
             </View>
@@ -253,7 +238,6 @@ export default function LoginScreen() {
               style={[
                 styles.loginBtn,
                 !canLogin && styles.loginBtnDisabled,
-                selectedMode === "vendeur" && canLogin && styles.loginBtnGreen,
                 selectedMode === "stand" && canLogin && styles.loginBtnStand,
               ]}
               onPress={handleLogin}

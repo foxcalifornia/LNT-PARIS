@@ -11,7 +11,8 @@ router.get("/stands", async (req, res) => {
     const stands = await db.select({
       id: standsTable.id,
       name: standsTable.name,
-      active: standsTable.active,
+      location: standsTable.location,
+      isActive: standsTable.active,
       sumupTerminalId: standsTable.sumupTerminalId,
       createdAt: standsTable.createdAt,
     }).from(standsTable).orderBy(standsTable.id);
@@ -24,21 +25,23 @@ router.get("/stands", async (req, res) => {
 
 router.post("/stands", async (req, res) => {
   try {
-    const { name, sumupTerminalId, password } = req.body as {
+    const { name, location, sumupTerminalId, sellerPassword } = req.body as {
       name?: string;
+      location?: string;
       sumupTerminalId?: string;
-      password?: string;
+      sellerPassword?: string;
     };
     if (!name || !name.trim()) {
       res.status(400).json({ error: "Le nom du stand est requis" });
       return;
     }
     let sellerPasswordHash: string | null = null;
-    if (password && password.length >= 4) {
-      sellerPasswordHash = await bcrypt.hash(password, 10);
+    if (sellerPassword && sellerPassword.length >= 4) {
+      sellerPasswordHash = await bcrypt.hash(sellerPassword, 10);
     }
     const [stand] = await db.insert(standsTable).values({
       name: name.trim(),
+      location: location?.trim() || null,
       sumupTerminalId: sumupTerminalId?.trim() || null,
       sellerPasswordHash,
     }).returning();
@@ -48,7 +51,8 @@ router.post("/stands", async (req, res) => {
     res.status(201).json({
       id: stand.id,
       name: stand.name,
-      active: stand.active,
+      location: stand.location,
+      isActive: stand.active,
       sumupTerminalId: stand.sumupTerminalId,
       createdAt: stand.createdAt,
     });
@@ -61,19 +65,31 @@ router.post("/stands", async (req, res) => {
 router.put("/stands/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { name, active, sumupTerminalId } = req.body as {
+    const { name, location, isActive, sumupTerminalId, sellerPassword } = req.body as {
       name?: string;
-      active?: boolean;
+      location?: string | null;
+      isActive?: boolean;
       sumupTerminalId?: string | null;
+      sellerPassword?: string;
     };
     const updates: Partial<typeof standsTable.$inferInsert> = { updatedAt: new Date() };
     if (name !== undefined) updates.name = name.trim();
-    if (active !== undefined) updates.active = active;
+    if (location !== undefined) updates.location = location?.trim() || null;
+    if (isActive !== undefined) updates.active = isActive;
     if (sumupTerminalId !== undefined) updates.sumupTerminalId = sumupTerminalId?.trim() || null;
+    if (sellerPassword && sellerPassword.length >= 4) {
+      updates.sellerPasswordHash = await bcrypt.hash(sellerPassword, 10);
+    }
 
     const [updated] = await db.update(standsTable).set(updates).where(eq(standsTable.id, id)).returning();
     if (!updated) { res.status(404).json({ error: "Stand non trouvé" }); return; }
-    res.json({ id: updated.id, name: updated.name, active: updated.active, sumupTerminalId: updated.sumupTerminalId });
+    res.json({
+      id: updated.id,
+      name: updated.name,
+      location: updated.location,
+      isActive: updated.active,
+      sumupTerminalId: updated.sumupTerminalId,
+    });
   } catch (error) {
     req.log.error(error);
     res.status(500).json({ error: "Erreur lors de la mise à jour du stand" });

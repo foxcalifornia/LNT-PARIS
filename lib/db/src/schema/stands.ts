@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 export const standsTable = pgTable("stands", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  location: text("location"),
   active: boolean("active").notNull().default(true),
   sellerPasswordHash: text("seller_password_hash"),
   sumupTerminalId: text("sumup_terminal_id"),
