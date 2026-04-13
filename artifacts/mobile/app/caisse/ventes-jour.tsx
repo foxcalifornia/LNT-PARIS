@@ -14,15 +14,17 @@ import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { api, formatPrix, type VenteTransaction } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
 
 export default function VentesJourScreen() {
   const insets = useSafeAreaInsets();
+  const { standId } = useAuth();
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["ventesJour"],
-    queryFn: api.caisse.getVentesJour,
+    queryKey: ["ventesJour", standId],
+    queryFn: () => api.caisse.getVentesJour(standId),
     refetchInterval: 15000,
   });
 

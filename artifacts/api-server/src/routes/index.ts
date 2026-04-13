@@ -6,6 +6,7 @@ import sumupRouter from "./sumup";
 import consommablesRouter from "./consommables";
 import settingsRouter from "./settings";
 import authRouter from "./auth";
+import standsRouter from "./stands";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use("/payments", sumupRouter);
 router.use(consommablesRouter);
 router.use(settingsRouter);
 router.use(authRouter);
+router.use(standsRouter);
 
 export default router;

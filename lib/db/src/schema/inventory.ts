@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, boolean, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -35,6 +35,7 @@ export const ventesTable = pgTable("ventes", {
   commentaire: text("commentaire"),
   groupKey: text("group_key"),
   sessionId: integer("session_id").references(() => collectionsTable.id),
+  standId: integer("stand_id"),
   saleReference: text("sale_reference"),
   cancelled: boolean("cancelled").notNull().default(false),
   cancelledAt: timestamp("cancelled_at"),
@@ -51,8 +52,17 @@ export const mouvementsStockTable = pgTable("mouvements_stock", {
   stockReserveAvant: integer("stock_reserve_avant").notNull(),
   stockReserveApres: integer("stock_reserve_apres").notNull(),
   commentaire: text("commentaire"),
+  standId: integer("stand_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const inventoryByStandTable = pgTable("inventory_by_stand", {
+  standId: integer("stand_id").notNull(),
+  produitId: integer("produit_id").notNull().references(() => produitsTable.id, { onDelete: "cascade" }),
+  stockBoutique: integer("stock_boutique").notNull().default(0),
+  minimumBoutique: integer("minimum_boutique").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.standId, t.produitId] })]);
 
 export const insertCollectionSchema = createInsertSchema(collectionsTable).omit({ id: true, createdAt: true });
 export type InsertCollection = z.infer<typeof insertCollectionSchema>;
@@ -69,3 +79,5 @@ export type Vente = typeof ventesTable.$inferSelect;
 export const insertMouvementSchema = createInsertSchema(mouvementsStockTable).omit({ id: true, createdAt: true });
 export type InsertMouvement = z.infer<typeof insertMouvementSchema>;
 export type MouvementStock = typeof mouvementsStockTable.$inferSelect;
+
+export type InventoryByStand = typeof inventoryByStandTable.$inferSelect;

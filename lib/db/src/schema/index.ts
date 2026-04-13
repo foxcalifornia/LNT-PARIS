@@ -4,3 +4,4 @@ export * from "./sumup";
 export * from "./consommables";
 export * from "./settings";
 export * from "./boites";
+export * from "./stands";

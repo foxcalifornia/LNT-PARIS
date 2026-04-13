@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { api, formatPrix, type VenteTransaction } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
 
@@ -23,10 +24,11 @@ export default function TransactionDetailScreen() {
   const { venteId } = useLocalSearchParams<{ venteId: string }>();
   const queryClient = useQueryClient();
   const [cancelled, setCancelled] = useState(false);
+  const { standId } = useAuth();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["ventesJour"],
-    queryFn: api.caisse.getVentesJour,
+    queryKey: ["ventesJour", standId],
+    queryFn: () => api.caisse.getVentesJour(standId),
   });
 
   const transaction = data?.transactions.find(

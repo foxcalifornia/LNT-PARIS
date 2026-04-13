@@ -25,6 +25,7 @@ import {
 } from "@/lib/cart";
 import { useSettings } from "@/context/SettingsContext";
 import { useResponsive, MAX_MODAL_WIDTH } from "@/hooks/useResponsive";
+import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
 const POLL_INTERVAL_MS = 3000;
@@ -46,6 +47,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
   const insets = useSafeAreaInsets();
   const { promoEnabled } = useSettings();
   const { isTablet } = useResponsive();
+  const { standId } = useAuth();
   const [editingProduitId, setEditingProduitId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -142,6 +144,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             await api.payments.confirm({
               saleReference: ref,
               items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+              standId,
               ...opts,
             });
             await onRefreshAfterVente();
@@ -218,6 +221,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                 saleRef1: splitRef1!,
                 saleRef2: ref,
                 items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+                standId,
                 ...(remiseCentimes > 0 ? { remiseCentimes, remiseType } : {}),
                 ...(commentaire.trim() ? { commentaire: commentaire.trim() } : {}),
               });
@@ -256,6 +260,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
         montantCentimes: splitPart1Centimes,
         description: `LNT Paris – Part 1/${formatPrix(splitPart1Centimes)}`,
         items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+        standId,
       });
       setSplitState("part1_waiting");
       startSplitPoll(result.saleReference, 1);
@@ -276,6 +281,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
         montantCentimes: splitPart2Centimes,
         description: `LNT Paris – Part 2/${formatPrix(splitPart2Centimes)}`,
         items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+        standId,
       });
       setSplitState("part2_waiting");
       startSplitPoll(result.saleReference, 2);
@@ -316,6 +322,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
         montantCentimes: totalFinal,
         description: `LNT Paris – ${totalItems} paire${totalItems > 1 ? "s" : ""}`,
         items: snap.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
+        standId,
       });
       setSaleReference(result.saleReference);
       setTerminalState("waiting");
@@ -350,6 +357,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
         saleReference,
         items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
         forceConfirm: true,
+        standId,
         ...opts,
       });
       await onRefreshAfterVente();

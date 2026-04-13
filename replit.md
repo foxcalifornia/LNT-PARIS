@@ -144,9 +144,43 @@ cd artifacts/api-server && node build.mjs
 - **Reporting punctuality**: `parsePunctuality` now accepts `openHour` from settings instead of hardcoded `10`.
 - **Inventaire price editing**: Product bottom sheet includes "Modifier le prix" expandable row via `prixMutation`.
 
+## Multi-Stand System
+
+### DB Schema (added)
+- `stands` table: id, name, location, seller_password_hash, sumup_terminal_id, is_active, created_at
+- `inventory_by_stand` table: stand_id + produit_id (composite PK), stock_boutique, stock_minimum, updated_at
+- Nullable `stand_id` column added to: `ventes`, `sessions_caisse`, `mouvements_stock`
+
+### API Routes
+- `GET/POST/PUT/DELETE /api/stands` — CRUD for stands (admin)
+- `POST /api/stands/login` — Stand vendor login (returns stand info + checks seller_password_hash)
+- `GET /api/stands/:id/inventory` — Get per-stand stock
+- `PUT /api/stands/:id/inventory/:produitId/minimum` — Set minimum stock for stand
+- `POST /api/stands/:id/inventory/transfer` — Transfer stock reserve ↔ stand
+
+### API Behavior
+- All payment endpoints (`create`, `confirm`, `confirm-multi`) accept optional `standId`
+- When `standId` present: uses stand's `sumupTerminalId` for terminal; deducts from `inventory_by_stand`
+- When `standId` absent: legacy behavior (uses `produits.quantite`)
+- `GET /api/caisse/sessions?standId=N` — Filter sessions by stand
+- `GET /api/caisse/today?standId=N` — Filter ventes du jour by stand
+
+### Mobile Auth Flow
+Three login modes:
+1. **Admin** — password from `settings.admin_password_hash`
+2. **Vendeur** — password from `settings.vendeur_password_hash` (no stand)
+3. **Stand** — picks stand from list → stand's `seller_password_hash`
+
+AuthContext exposes: `role`, `standId`, `standName`, `standSumupTerminalId`, `hasStand`
+
+### Mobile Stand Management
+- Settings → "Gestion des stands" (`/parametres/stands`) — CRUD UI for stands (admin only)
+- Active caisse shows stand badge when connected to a stand
+
 ## Password
 
-Le mot de passe pour accéder à la caisse et à l'inventaire est : **1234** (Admin), **5678** (Vendeur)
+Le mot de passe pour accéder à la caisse et à l'inventaire est : **1234** (Admin et Vendeur)
+Mot de passe des stands : configuré par stand dans la DB
 
 ## TypeScript & Composite Projects
 

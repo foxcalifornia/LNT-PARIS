@@ -193,6 +193,23 @@ export type VenteOpts = {
   commentaire?: string;
   groupKey?: string;
   montantCashCentimes?: number;
+  standId?: number | null;
+};
+
+export type Stand = {
+  id: number;
+  name: string;
+  location: string | null;
+  sumupTerminalId: string | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type StandInventoryItem = {
+  produitId: number;
+  stockBoutique: number;
+  stockMinimum: number;
+  updatedAt: string;
 };
 
 export function formatPrix(centimes: number): string {
@@ -207,8 +224,8 @@ export function formatDateLabel(isoDate: string): string {
 
 export const api = {
   caisse: {
-    getSessions: () => request<Session[]>("/caisse/sessions"),
-    createSession: (data: { date: string; heure: string; localisation?: string | null; typePaiement?: string | null }) =>
+    getSessions: (standId?: number | null) => request<Session[]>(standId ? `/caisse/sessions?standId=${standId}` : "/caisse/sessions"),
+    createSession: (data: { date: string; heure: string; localisation?: string | null; typePaiement?: string | null; standId?: number | null }) =>
       request<Session>("/caisse/sessions", {
         method: "POST",
         body: JSON.stringify(data),
@@ -218,7 +235,7 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       }),
-    getVentesJour: () => request<VentesJour>("/caisse/today"),
+    getVentesJour: (standId?: number | null) => request<VentesJour>(standId ? `/caisse/today?standId=${standId}` : "/caisse/today"),
     cancelLastVente: () =>
       request<{ cancelled: number; message: string; refund?: { success: boolean; refundId?: string; error?: string } | null }>("/caisse/ventes/last", { method: "DELETE" }),
     cancelVente: (venteId: number) =>
@@ -331,6 +348,7 @@ export const api = {
       montantCentimes: number;
       description?: string;
       items: { produitId: number; quantite: number }[];
+      standId?: number | null;
     }) =>
       request<{ saleReference: string; checkoutId: string; readerEnvoyé: boolean }>(
         "/payments/create",
@@ -345,6 +363,7 @@ export const api = {
       saleReference: string;
       items: { produitId: number; quantite: number }[];
       forceConfirm?: boolean;
+      standId?: number | null;
     } & VenteOpts) =>
       request<{ message: string; saleReference: string }>(
         "/payments/confirm",
@@ -357,6 +376,7 @@ export const api = {
       remiseCentimes?: number;
       remiseType?: string;
       commentaire?: string;
+      standId?: number | null;
     }) =>
       request<{ message: string }>(
         "/payments/confirm-multi",
@@ -387,6 +407,37 @@ export const api = {
     updatePassword: (data: { role: "admin" | "vendeur"; newPassword: string; confirmPassword: string }) =>
       request<{ success: boolean }>("/settings/password", {
         method: "PUT",
+        body: JSON.stringify(data),
+      }),
+  },
+
+  stands: {
+    getAll: () => request<Stand[]>("/stands"),
+    login: (standId: number, password: string) =>
+      request<{ success: boolean; stand: { id: number; name: string; sumupTerminalId: string | null } }>("/stands/login", {
+        method: "POST",
+        body: JSON.stringify({ standId, password }),
+      }),
+    create: (data: { name: string; location?: string; sumupTerminalId?: string; sellerPassword: string }) =>
+      request<Stand>("/stands", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: number, data: { name?: string; location?: string; sumupTerminalId?: string; sellerPassword?: string; isActive?: boolean }) =>
+      request<Stand>(`/stands/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: number) => request<{ message: string }>(`/stands/${id}`, { method: "DELETE" }),
+    getInventory: (standId: number) => request<StandInventoryItem[]>(`/stands/${standId}/inventory`),
+    setMinimum: (standId: number, produitId: number, minimum: number) =>
+      request<StandInventoryItem>(`/stands/${standId}/inventory/${produitId}/minimum`, {
+        method: "PUT",
+        body: JSON.stringify({ minimum }),
+      }),
+    transfer: (standId: number, data: { produitId: number; quantite: number; direction: "reserve_to_stand" | "stand_to_reserve" }) =>
+      request<{ message: string; newStandStock: number; newReserveStock: number }>(`/stands/${standId}/inventory/transfer`, {
+        method: "POST",
         body: JSON.stringify(data),
       }),
   },

@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { sessionsTable, insertSessionSchema } from "@workspace/db/schema";
 import { ventesTable, produitsTable, collectionsTable } from "@workspace/db/schema";
 import { sumupCheckoutsTable } from "@workspace/db/schema";
-import { desc, gte, eq, and } from "drizzle-orm";
+import { desc, gte, eq, and, isNull, or } from "drizzle-orm";
 import { restaurerConsommables } from "../lib/consommables";
 import { refundTransaction } from "../lib/sumup";
 
@@ -11,7 +11,11 @@ const router: IRouter = Router();
 
 router.get("/sessions", async (req, res) => {
   try {
-    const sessions = await db.select().from(sessionsTable).orderBy(desc(sessionsTable.createdAt));
+    const standId = req.query.standId ? parseInt(req.query.standId as string) : null;
+    const whereClause = standId ? eq(sessionsTable.standId, standId) : undefined;
+    const sessions = await db.select().from(sessionsTable)
+      .where(whereClause)
+      .orderBy(desc(sessionsTable.createdAt));
     res.json(sessions);
   } catch (error) {
     req.log.error(error);
@@ -23,6 +27,11 @@ router.get("/today", async (req, res) => {
   try {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const standId = req.query.standId ? parseInt(req.query.standId as string) : null;
+
+    const whereClause = standId
+      ? and(gte(ventesTable.createdAt, startOfDay), eq(ventesTable.standId, standId))
+      : gte(ventesTable.createdAt, startOfDay);
 
     const ventes = await db
       .select({
@@ -50,7 +59,7 @@ router.get("/today", async (req, res) => {
           eq(ventesTable.typePaiement, "CARTE"),
         ),
       )
-      .where(gte(ventesTable.createdAt, startOfDay))
+      .where(whereClause)
       .orderBy(ventesTable.createdAt);
 
     type TxGroup = {

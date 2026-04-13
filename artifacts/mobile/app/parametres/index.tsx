@@ -122,6 +122,12 @@ export default function ParametresScreen() {
             subtitle="Modifier les mots de passe de connexion"
             onPress={() => router.push("/parametres/acces")}
           />
+          <NavRow
+            icon="map-pin"
+            title="Gestion des stands"
+            subtitle="Créer, modifier ou supprimer des stands"
+            onPress={() => router.push("/parametres/stands")}
+          />
           <SectionHoraires settings={settings!} saving={saving} onSave={saveSettings} />
           <SectionPromotions settings={settings!} saving={saving} onSave={saveSettings} />
           <SectionPaiements settings={settings!} saving={saving} onSave={saveSettings} />

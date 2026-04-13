@@ -1,0 +1,271 @@
+Implémenter une fonctionnalité complète de gestion multistand dans l’application.
+
+Objectif :
+Permettre à l’application de gérer plusieurs stands de vente, chacun avec :
+- son propre stock boutique
+- son propre terminal de paiement SumUp
+- son propre accès vendeur
+
+L’admin doit pouvoir créer, configurer et supprimer les stands depuis les Paramètres.
+
+1. Nouvelle logique de connexion
+
+Modifier l’écran de connexion de l’application.
+
+Aujourd’hui :
+- Admin
+- Vendeur
+
+Nouvelle logique demandée :
+- Admin
+- Stand
+
+Comportement attendu :
+
+Si l’utilisateur choisit **Admin** :
+- il saisit le mot de passe Admin
+- il accède à toute l’application
+
+Si l’utilisateur choisit **Stand** :
+- afficher la liste des stands disponibles
+  - exemple : Stand A, Stand B, Stand C
+- quand l’utilisateur clique sur un stand :
+  - demander le mot de passe vendeur associé à ce stand
+- si le mot de passe est correct :
+  - connecter l’utilisateur sur ce stand
+  - ouvrir l’application sur l’environnement de ce stand
+
+2. Gestion des stands dans la base de données
+
+Ajouter une vraie structure de données pour gérer plusieurs stands.
+
+Créer une table `stands` contenant au minimum :
+- id
+- name
+- active
+- seller_password_hash
+- sumup_terminal_id
+- created_at
+- updated_at
+
+Chaque stand doit être une entité propre de l’application.
+
+3. Stock par stand
+
+Chaque stand doit avoir son propre stock boutique.
+
+Le stock global doit être organisé comme suit :
+- stock réserve central
+- stock boutique par stand
+
+Cela signifie que pour chaque produit, il doit être possible de connaître :
+- le stock en réserve
+- le stock du Stand A
+- le stock du Stand B
+- le stock du Stand C
+- etc.
+
+Mettre en place une structure d’inventaire compatible multistand.
+
+Exemple de structure possible :
+table `inventory_by_stand`
+- id
+- stand_id
+- product_id
+- stock_boutique
+- minimum_boutique
+- updated_at
+
+Et conserver le stock réserve séparément.
+
+4. Relation entre stock réserve et stands
+
+Chaque inventaire de stand doit être relié au stock réserve.
+
+Quand on transfère du stock vers un stand :
+- le stock du stand augmente
+- le stock réserve diminue automatiquement
+
+Quand on retire du stock d’un stand vers la réserve :
+- le stock du stand diminue
+- le stock réserve augmente
+
+Créer une logique claire de transfert :
+- Réserve → Stand
+- Stand → Réserve
+
+Avec contrôle de cohérence :
+- ne jamais permettre un stock négatif
+- vérifier les quantités disponibles avant transfert
+
+5. Inventaire par stand
+
+Dans la section Inventaire côté Admin :
+- permettre de sélectionner un stand
+- afficher l’inventaire de ce stand
+- afficher aussi le stock réserve global
+
+Le parcours doit permettre :
+- voir les collections
+- voir les produits
+- ouvrir la fiche produit
+- voir pour ce produit :
+  - stock réserve
+  - stock du stand sélectionné
+  - minimum du stand sélectionné
+- modifier le minimum par stand
+- transférer du stock entre réserve et stand
+
+Important :
+Le minimum boutique doit être paramétrable par produit et par stand.
+
+6. Paramètres : gestion des stands
+
+Dans la section Paramètres Admin, ajouter une vraie section :
+**Gestion des stands**
+
+Cette section doit permettre :
+- créer un stand
+- modifier un stand
+- désactiver ou supprimer un stand
+
+Pour chaque stand, l’admin doit pouvoir définir :
+- nom du stand
+- mot de passe vendeur du stand
+- terminal SumUp associé
+- statut actif / inactif
+
+Interface souhaitée :
+Liste des stands
+- Stand A
+- Stand B
+- Stand C
+
+Actions possibles :
+- Ajouter un stand
+- Modifier
+- Désactiver
+- Supprimer
+
+7. Attribution d’un terminal SumUp par stand
+
+Chaque stand doit être relié à son propre terminal de paiement SumUp.
+
+Dans les Paramètres du stand, permettre de définir :
+- l’identifiant du terminal SumUp
+- éventuellement le statut de configuration du terminal
+
+Comportement attendu :
+- quand une vente carte est faite sur un stand,
+- l’application doit utiliser le terminal SumUp associé à ce stand uniquement
+
+Exemple :
+- Stand A → Terminal T001
+- Stand B → Terminal T002
+
+Les paiements du Stand A ne doivent jamais être envoyés au terminal du Stand B.
+
+8. Compte vendeur par stand
+
+Chaque stand a son propre accès vendeur.
+
+Cela signifie :
+- un mot de passe vendeur propre à chaque stand
+- la connexion vendeur se fait toujours après sélection du stand
+- un vendeur connecté sur un stand ne voit que les données de ce stand
+
+9. Visibilité et droits selon le profil
+
+Admin :
+- voit tous les stands
+- voit tous les stocks
+- voit tous les terminaux
+- peut gérer tous les paramètres
+- peut consulter la caisse de tous les stands
+
+Stand / vendeur :
+- n’accède qu’au stand sélectionné
+- ne voit que :
+  - la caisse de son stand
+  - l’inventaire en lecture seule de son stand si cette vue existe
+  - les ventes de son stand
+- ne voit jamais les autres stands
+
+10. Caisse par stand
+
+La caisse doit être contextualisée par stand.
+
+Quand un vendeur est connecté sur un stand :
+- toutes les ventes doivent être liées à ce stand
+- les transactions du jour doivent être filtrées par stand
+- le total caisse en temps réel doit être calculé par stand
+- l’ouverture de caisse doit être propre à chaque stand
+- les ventes du jour doivent être propres à chaque stand
+
+Ajouter le champ `stand_id` dans les tables liées aux ventes et à la caisse.
+
+Exemple :
+table `sales`
+- id
+- stand_id
+- amount
+- payment_method
+- payment_status
+- created_at
+
+11. Reporting multistand
+
+Le reporting Admin doit permettre :
+- voir les ventes par stand
+- comparer les stands
+- voir les produits les plus vendus par stand
+- voir les ouvertures de caisse par stand
+- voir les stocks par stand
+
+Ajouter des filtres :
+- Tous les stands
+- Stand A
+- Stand B
+- etc.
+
+12. Sécurité
+
+- protéger les accès côté frontend et côté backend
+- ne pas seulement masquer l’interface
+- vérifier réellement les droits selon :
+  - Admin
+  - Stand/Vendeur
+
+- stocker les mots de passe de manière sécurisée
+- utiliser un hash côté backend
+- ne jamais stocker les mots de passe en clair
+
+13. Interface utilisateur
+
+L’expérience utilisateur doit être simple :
+
+Écran d’entrée :
+- Admin
+- Stand
+
+Si Stand :
+- liste des stands
+- clic sur un stand
+- saisie du mot de passe vendeur
+- connexion au stand
+
+Une fois connecté sur un stand :
+- afficher clairement le nom du stand actif
+- exemple :
+  “Connecté sur : Stand A”
+
+14. Résultat final attendu
+
+Je veux une application multistand avec :
+- plusieurs stands configurables
+- un stock boutique propre à chaque stand
+- une réserve centrale reliée aux stands
+- un terminal SumUp propre à chaque stand
+- un accès vendeur propre à chaque stand
+- une connexion par sélection du stand puis mot de passe vendeur
+- un reporting et une caisse filtrés par stand

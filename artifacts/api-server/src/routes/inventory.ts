@@ -9,6 +9,7 @@ import {
   insertProduitSchema,
   insertVenteSchema,
   boitesTable,
+  inventoryByStandTable,
 } from "@workspace/db/schema";
 import { eq, desc, gte, and } from "drizzle-orm";
 import { decrementerConsommables } from "../lib/consommables";
@@ -356,13 +357,14 @@ router.post("/ventes", async (req, res) => {
 
 router.post("/ventes/batch", async (req, res) => {
   try {
-    const { items, typePaiement, remiseCentimes, remiseType, commentaire, groupKey } = req.body as {
+    const { items, typePaiement, remiseCentimes, remiseType, commentaire, groupKey, standId } = req.body as {
       items: { produitId: number; quantite: number }[];
       typePaiement: "CASH";
       remiseCentimes?: number;
       remiseType?: string;
       commentaire?: string;
       groupKey?: string;
+      standId?: number;
     };
 
     if (!items || items.length === 0) {
@@ -389,16 +391,11 @@ router.post("/ventes/batch", async (req, res) => {
         res.status(404).json({ error: `Produit ${item.produitId} introuvable` });
         return;
       }
-      if (produit.quantite < item.quantite) {
-        res.status(400).json({ error: `Stock boutique insuffisant pour ${produit.couleur}` });
-        return;
-      }
 
       const montantBrut = produit.prixCentimes * item.quantite;
       const remiseProportion = nbItems > 0 ? item.quantite / nbItems : 0;
       const remiseItem = Math.round(remiseTotale * remiseProportion);
       const montantCentimes = Math.max(0, montantBrut - remiseItem);
-      const newBoutique = produit.quantite - item.quantite;
 
       await db.insert(ventesTable).values({
         produitId: item.produitId,
@@ -409,22 +406,33 @@ router.post("/ventes/batch", async (req, res) => {
         remiseType: remiseType ?? null,
         commentaire: commentaire ?? null,
         groupKey: groupKey ?? null,
+        standId: standId ?? null,
       });
 
-      await db
-        .update(produitsTable)
-        .set({ quantite: newBoutique })
-        .where(eq(produitsTable.id, item.produitId));
-
-      await db.insert(mouvementsStockTable).values({
-        produitId: item.produitId,
-        typeMouvement: "vente",
-        quantite: item.quantite,
-        stockBoutiqueAvant: produit.quantite,
-        stockBoutiqueApres: newBoutique,
-        stockReserveAvant: produit.stockReserve,
-        stockReserveApres: produit.stockReserve,
-      });
+      if (standId) {
+        const [ibs] = await db.select().from(inventoryByStandTable).where(
+          and(eq(inventoryByStandTable.standId, standId), eq(inventoryByStandTable.produitId, item.produitId))
+        );
+        const currentStock = ibs?.stockBoutique ?? 0;
+        await db.insert(inventoryByStandTable)
+          .values({ standId, produitId: item.produitId, stockBoutique: Math.max(0, currentStock - item.quantite), updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [inventoryByStandTable.standId, inventoryByStandTable.produitId],
+            set: { stockBoutique: Math.max(0, currentStock - item.quantite), updatedAt: new Date() },
+          });
+      } else {
+        const newBoutique = produit.quantite - item.quantite;
+        await db.update(produitsTable).set({ quantite: newBoutique }).where(eq(produitsTable.id, item.produitId));
+        await db.insert(mouvementsStockTable).values({
+          produitId: item.produitId,
+          typeMouvement: "vente",
+          quantite: item.quantite,
+          stockBoutiqueAvant: produit.quantite,
+          stockBoutiqueApres: newBoutique,
+          stockReserveAvant: produit.stockReserve,
+          stockReserveApres: produit.stockReserve,
+        });
+      }
 
       totalArticles += item.quantite;
     }
@@ -440,13 +448,14 @@ router.post("/ventes/batch", async (req, res) => {
 
 router.post("/ventes/batch-mixte", async (req, res) => {
   try {
-    const { items, montantCashCentimes, remiseCentimes, remiseType, commentaire, groupKey } = req.body as {
+    const { items, montantCashCentimes, remiseCentimes, remiseType, commentaire, groupKey, standId } = req.body as {
       items: { produitId: number; quantite: number }[];
       montantCashCentimes: number;
       remiseCentimes?: number;
       remiseType?: string;
       commentaire?: string;
       groupKey?: string;
+      standId?: number;
     };
 
     if (!items || items.length === 0) {
@@ -496,7 +505,6 @@ router.post("/ventes/batch-mixte", async (req, res) => {
       const montantCentimes = Math.max(0, montantBrut - remiseItem);
       const cashItemPart = Math.round(cashPart * (montantCentimes / totalFinal));
       const carteItemPart = montantCentimes - cashItemPart;
-      const newBoutique = produit.quantite - quantite;
 
       await db.insert(ventesTable).values({
         produitId: produit.id,
@@ -509,22 +517,33 @@ router.post("/ventes/batch-mixte", async (req, res) => {
         remiseType: remiseType ?? null,
         commentaire: commentaire ?? null,
         groupKey: groupKey ?? null,
+        standId: standId ?? null,
       });
 
-      await db
-        .update(produitsTable)
-        .set({ quantite: newBoutique })
-        .where(eq(produitsTable.id, produit.id));
-
-      await db.insert(mouvementsStockTable).values({
-        produitId: produit.id,
-        typeMouvement: "vente",
-        quantite,
-        stockBoutiqueAvant: produit.quantite,
-        stockBoutiqueApres: newBoutique,
-        stockReserveAvant: produit.stockReserve,
-        stockReserveApres: produit.stockReserve,
-      });
+      if (standId) {
+        const [ibs] = await db.select().from(inventoryByStandTable).where(
+          and(eq(inventoryByStandTable.standId, standId), eq(inventoryByStandTable.produitId, produit.id))
+        );
+        const currentStock = ibs?.stockBoutique ?? 0;
+        await db.insert(inventoryByStandTable)
+          .values({ standId, produitId: produit.id, stockBoutique: Math.max(0, currentStock - quantite), updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [inventoryByStandTable.standId, inventoryByStandTable.produitId],
+            set: { stockBoutique: Math.max(0, currentStock - quantite), updatedAt: new Date() },
+          });
+      } else {
+        const newBoutique = produit.quantite - quantite;
+        await db.update(produitsTable).set({ quantite: newBoutique }).where(eq(produitsTable.id, produit.id));
+        await db.insert(mouvementsStockTable).values({
+          produitId: produit.id,
+          typeMouvement: "vente",
+          quantite,
+          stockBoutiqueAvant: produit.quantite,
+          stockBoutiqueApres: newBoutique,
+          stockReserveAvant: produit.stockReserve,
+          stockReserveApres: produit.stockReserve,
+        });
+      }
 
       totalArticles += quantite;
     }

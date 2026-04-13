@@ -54,7 +54,7 @@ function getTodayLabel() {
 export default function CaisseScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { isAdmin, logout } = useAuth();
+  const { isAdmin, logout, standId, standName } = useAuth();
   const { openHour, closeHour } = useSettings();
   const [caisseState, setCaisseState] = useState<CaisseState>("checking");
   const [currentSession, setCurrentSession] = useState<Session | null>(null);
@@ -77,7 +77,7 @@ export default function CaisseScreen() {
 
   const checkTodaySession = useCallback(async () => {
     try {
-      const sessions = await api.caisse.getSessions();
+      const sessions = await api.caisse.getSessions(standId);
       const today = getTodayFr();
       const todaySession = sessions.find((s) => s.date === today);
       if (todaySession) {
@@ -101,7 +101,7 @@ export default function CaisseScreen() {
         setCaisseState(isAdmin ? "admin_view" : "closed_hours");
       }
     }
-  }, [isAdmin, openHour, closeHour]);
+  }, [isAdmin, openHour, closeHour, standId]);
 
   useEffect(() => {
     checkTodaySession();
@@ -190,7 +190,7 @@ export default function CaisseScreen() {
 
       const localisation = await getLocalisation();
 
-      const session = await api.caisse.createSession({ date, heure, localisation });
+      const session = await api.caisse.createSession({ date, heure, localisation, standId });
       setCurrentSession(session);
       if (isOverride) {
         adminOverrideRef.current = "active";
@@ -218,9 +218,9 @@ export default function CaisseScreen() {
       if (!opts?.montantCashCentimes && opts?.montantCashCentimes !== 0) {
         throw new Error("Montant cash requis pour un paiement mixte.");
       }
-      await api.inventory.batchVenteMixte({ items, montantCashCentimes: opts.montantCashCentimes, ...opts });
+      await api.inventory.batchVenteMixte({ items, montantCashCentimes: opts.montantCashCentimes, ...opts, standId });
     } else {
-      await api.inventory.batchVente({ items, typePaiement: "CASH", ...opts });
+      await api.inventory.batchVente({ items, typePaiement: "CASH", ...opts, standId });
     }
     refetchCollections();
     queryClient.invalidateQueries({ queryKey: ["ventesJour"] });
@@ -406,9 +406,10 @@ export default function CaisseScreen() {
 }
 
 function FermetureSummary({ sessionId }: { sessionId: number | null }) {
+  const { standId } = useAuth();
   const { data: ventesJour } = useQuery({
-    queryKey: ["ventesJour"],
-    queryFn: api.caisse.getVentesJour,
+    queryKey: ["ventesJour", standId],
+    queryFn: () => api.caisse.getVentesJour(standId),
     enabled: !!sessionId,
   });
 
@@ -533,10 +534,11 @@ function AdminConsultView({
   onShowVentesJour: () => void;
 }) {
   const { openHour, closeHour } = useSettings();
+  const { standId } = useAuth();
   const isInHours = isCaisseHours(openHour, closeHour);
   const { data: ventesJour } = useQuery({
-    queryKey: ["ventesJour"],
-    queryFn: api.caisse.getVentesJour,
+    queryKey: ["ventesJour", standId],
+    queryFn: () => api.caisse.getVentesJour(standId),
   });
 
   const activeVentes = ventesJour?.transactions?.filter((t) => !t.cancelled) ?? [];
@@ -690,6 +692,7 @@ function ActiveCaisseView({
 }: ActiveCaisseViewProps) {
   const cartCount = cartTotalItems(cart);
   const [now, setNow] = useState(new Date());
+  const { standId, standName } = useAuth();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30000);
@@ -697,8 +700,8 @@ function ActiveCaisseView({
   }, []);
 
   const { data: ventesJour } = useQuery({
-    queryKey: ["ventesJour"],
-    queryFn: api.caisse.getVentesJour,
+    queryKey: ["ventesJour", standId],
+    queryFn: () => api.caisse.getVentesJour(standId),
     refetchInterval: 15000,
   });
 
@@ -718,7 +721,14 @@ function ActiveCaisseView({
         <View style={styles.sessionBannerLeft}>
           <View style={styles.openDot} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.sessionBannerTitle}>Caisse Ouverte</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={styles.sessionBannerTitle}>Caisse Ouverte</Text>
+              {standName && (
+                <View style={styles.standBadge}>
+                  <Text style={styles.standBadgeText}>{standName}</Text>
+                </View>
+              )}
+            </View>
             {session && (
               <Text style={styles.sessionBannerSub}>
                 Ouverture : {session.heure}
@@ -1163,6 +1173,19 @@ const styles = StyleSheet.create({
     color: "#4B7A52",
     marginTop: 2,
     flexShrink: 1,
+  },
+  standBadge: {
+    backgroundColor: "#8B5CF620",
+    borderWidth: 1,
+    borderColor: "#8B5CF640",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  standBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: "#8B5CF6",
   },
   closeSessionBtn: {
     width: 38,
