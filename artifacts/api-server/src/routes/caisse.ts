@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { sessionsTable, insertSessionSchema } from "@workspace/db/schema";
-import { ventesTable, produitsTable, collectionsTable } from "@workspace/db/schema";
+import { ventesTable, produitsTable, collectionsTable, inventoryByStandTable } from "@workspace/db/schema";
 import { sumupCheckoutsTable } from "@workspace/db/schema";
 import { desc, gte, eq, and, isNull, or } from "drizzle-orm";
 import { restaurerConsommables } from "../lib/consommables";
@@ -40,6 +40,7 @@ router.get("/today", async (req, res) => {
         quantiteVendue: ventesTable.quantiteVendue,
         typePaiement: ventesTable.typePaiement,
         montantCentimes: ventesTable.montantCentimes,
+        remiseCentimes: ventesTable.remiseCentimes,
         createdAt: ventesTable.createdAt,
         couleur: produitsTable.couleur,
         collectionNom: collectionsTable.nom,
@@ -66,6 +67,7 @@ router.get("/today", async (req, res) => {
       heure: string;
       typePaiement: string;
       montantCentimes: number;
+      remiseCentimes: number;
       lastTime: number;
       firstVenteId: number;
       venteIds: number[];
@@ -81,6 +83,7 @@ router.get("/today", async (req, res) => {
         collectionNom: string;
         quantiteVendue: number;
         montantCentimes: number;
+        remiseCentimes: number;
       }[];
     };
 
@@ -103,6 +106,7 @@ router.get("/today", async (req, res) => {
 
       if (grouped && last) {
         last.montantCentimes += v.montantCentimes;
+        last.remiseCentimes += v.remiseCentimes ?? 0;
         last.lastTime = ts;
         last.venteIds.push(v.id);
         if (!last.sumupTransactionId && v.sumupTransactionId) {
@@ -119,6 +123,7 @@ router.get("/today", async (req, res) => {
         if (existing) {
           existing.quantiteVendue += v.quantiteVendue;
           existing.montantCentimes += v.montantCentimes;
+          existing.remiseCentimes += v.remiseCentimes ?? 0;
         } else {
           last.articles.push({
             produitId: v.produitId,
@@ -126,6 +131,7 @@ router.get("/today", async (req, res) => {
             collectionNom: v.collectionNom,
             quantiteVendue: v.quantiteVendue,
             montantCentimes: v.montantCentimes,
+            remiseCentimes: v.remiseCentimes ?? 0,
           });
         }
       } else {
@@ -137,6 +143,7 @@ router.get("/today", async (req, res) => {
           heure: v.createdAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
           typePaiement: v.typePaiement,
           montantCentimes: v.montantCentimes,
+          remiseCentimes: v.remiseCentimes ?? 0,
           lastTime: ts,
           firstVenteId: v.id,
           venteIds: [v.id],
@@ -152,6 +159,7 @@ router.get("/today", async (req, res) => {
             collectionNom: v.collectionNom,
             quantiteVendue: v.quantiteVendue,
             montantCentimes: v.montantCentimes,
+            remiseCentimes: v.remiseCentimes ?? 0,
           }],
         });
       }
@@ -212,7 +220,7 @@ router.post("/ventes/cancel", async (req, res) => {
 
       const windowVentes = dayVentes.filter((v) => {
         const ts = v.createdAt.getTime();
-        return ts >= windowStart.getTime() && ts <= windowEnd.getTime() && v.typePaiement === "CASH";
+        return ts >= windowStart.getTime() && ts <= windowEnd.getTime() && v.typePaiement === "CASH" && !v.cancelled;
       });
 
       const targetTs = targetVente.createdAt.getTime();
@@ -289,15 +297,28 @@ router.post("/ventes/cancel", async (req, res) => {
     let totalArticlesRestored = 0;
 
     for (const vente of groupVentes) {
-      const [current] = await db
-        .select({ quantite: produitsTable.quantite })
-        .from(produitsTable)
-        .where(eq(produitsTable.id, vente.produitId));
-      if (current) {
-        await db
-          .update(produitsTable)
-          .set({ quantite: current.quantite + vente.quantiteVendue })
+      if (vente.standId) {
+        const [ibs] = await db
+          .select({ stockBoutique: inventoryByStandTable.stockBoutique })
+          .from(inventoryByStandTable)
+          .where(and(eq(inventoryByStandTable.standId, vente.standId), eq(inventoryByStandTable.produitId, vente.produitId)));
+        if (ibs) {
+          await db
+            .update(inventoryByStandTable)
+            .set({ stockBoutique: ibs.stockBoutique + vente.quantiteVendue, updatedAt: new Date() })
+            .where(and(eq(inventoryByStandTable.standId, vente.standId), eq(inventoryByStandTable.produitId, vente.produitId)));
+        }
+      } else {
+        const [current] = await db
+          .select({ quantite: produitsTable.quantite })
+          .from(produitsTable)
           .where(eq(produitsTable.id, vente.produitId));
+        if (current) {
+          await db
+            .update(produitsTable)
+            .set({ quantite: current.quantite + vente.quantiteVendue })
+            .where(eq(produitsTable.id, vente.produitId));
+        }
       }
       await db
         .update(ventesTable)
@@ -386,15 +407,28 @@ router.delete("/ventes/last", async (req, res) => {
     let totalArticlesRestores = 0;
 
     for (const vente of transactionVentes) {
-      const [current] = await db
-        .select({ quantite: produitsTable.quantite })
-        .from(produitsTable)
-        .where(eq(produitsTable.id, vente.produitId));
-      if (current) {
-        await db
-          .update(produitsTable)
-          .set({ quantite: current.quantite + vente.quantiteVendue })
+      if (vente.standId) {
+        const [ibs] = await db
+          .select({ stockBoutique: inventoryByStandTable.stockBoutique })
+          .from(inventoryByStandTable)
+          .where(and(eq(inventoryByStandTable.standId, vente.standId), eq(inventoryByStandTable.produitId, vente.produitId)));
+        if (ibs) {
+          await db
+            .update(inventoryByStandTable)
+            .set({ stockBoutique: ibs.stockBoutique + vente.quantiteVendue, updatedAt: new Date() })
+            .where(and(eq(inventoryByStandTable.standId, vente.standId), eq(inventoryByStandTable.produitId, vente.produitId)));
+        }
+      } else {
+        const [current] = await db
+          .select({ quantite: produitsTable.quantite })
+          .from(produitsTable)
           .where(eq(produitsTable.id, vente.produitId));
+        if (current) {
+          await db
+            .update(produitsTable)
+            .set({ quantite: current.quantite + vente.quantiteVendue })
+            .where(eq(produitsTable.id, vente.produitId));
+        }
       }
       await db
         .update(ventesTable)
