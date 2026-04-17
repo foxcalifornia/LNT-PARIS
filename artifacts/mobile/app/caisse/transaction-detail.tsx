@@ -39,6 +39,8 @@ export default function TransactionDetailScreen() {
     mutationFn: () => api.caisse.cancelVente(Number(venteId)),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["ventesJour"] });
+      queryClient.invalidateQueries({ queryKey: ["standInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["collections"] });
       setCancelled(true);
 
       const isCarte = transaction?.typePaiement === "CARTE";
@@ -146,11 +148,8 @@ function TransactionDetailContent({
   const isMixte = t.typePaiement === "MIXTE";
   const paymentColor = isCash ? COLORS.cash : isMixte ? "#8B5CF6" : COLORS.card_payment;
 
-  const totalWithoutPromo = t.articles.reduce(
-    (sum, a) => sum + a.montantCentimes,
-    0,
-  );
-  const hasPromo = totalWithoutPromo !== t.montantCentimes;
+  const hasPromo = (t.remiseCentimes ?? 0) > 0;
+  const totalWithoutPromo = t.montantCentimes + (t.remiseCentimes ?? 0);
 
   return (
     <ScrollView
@@ -241,6 +240,8 @@ function TransactionDetailContent({
       <View style={[styles.card, isCancelled && styles.cardCancelled]}>
         {t.articles.map((a, i) => {
           const isLast = i === t.articles.length - 1;
+          const articleRemise = a.remiseCentimes ?? 0;
+          const articleOriginal = a.montantCentimes + articleRemise;
           return (
             <View key={i} style={[styles.articleRow, !isLast && styles.articleRowBorder]}>
               <View style={styles.articleLeft}>
@@ -261,6 +262,11 @@ function TransactionDetailContent({
                 {a.quantiteVendue > 1 && (
                   <Text style={styles.articleQty}>×{a.quantiteVendue}</Text>
                 )}
+                {articleRemise > 0 && !isCancelled && (
+                  <Text style={styles.articleOriginalPrice}>
+                    {formatPrix(articleOriginal)}
+                  </Text>
+                )}
                 <Text
                   style={[
                     styles.articlePrice,
@@ -268,6 +274,7 @@ function TransactionDetailContent({
                       color: COLORS.textSecondary,
                       textDecorationLine: "line-through",
                     },
+                    articleRemise > 0 && !isCancelled && { color: COLORS.accent },
                   ]}
                 >
                   {formatPrix(a.montantCentimes)}
@@ -560,6 +567,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: COLORS.text,
     letterSpacing: -0.2,
+  },
+  articleOriginalPrice: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    textDecorationLine: "line-through",
   },
   promoRow: {
     flexDirection: "row",
