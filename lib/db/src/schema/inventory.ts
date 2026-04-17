@@ -14,6 +14,7 @@ export const produitsTable = pgTable("produits", {
   id: serial("id").primaryKey(),
   collectionId: integer("collection_id").notNull().references(() => collectionsTable.id, { onDelete: "cascade" }),
   couleur: text("couleur").notNull(),
+  nomCollection: text("nom_collection"),
   quantite: integer("quantite").notNull().default(0),
   stockReserve: integer("stock_reserve").notNull().default(0),
   prixCentimes: integer("prix_centimes").notNull().default(0),
@@ -59,6 +60,8 @@ export const mouvementsStockTable = pgTable("mouvements_stock", {
 export const inventoryByStandTable = pgTable("inventory_by_stand", {
   standId: integer("stand_id").notNull(),
   produitId: integer("produit_id").notNull().references(() => produitsTable.id, { onDelete: "cascade" }),
+  nomProduit: text("nom_produit"),
+  nomCollection: text("nom_collection"),
   stockBoutique: integer("stock_boutique").notNull().default(0),
   minimumBoutique: integer("minimum_boutique").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
