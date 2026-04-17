@@ -92,6 +92,12 @@ export default function HomeScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
+      {!isAdmin && (
+        <Pressable style={styles.logoutTopRight} onPress={handleLogout}>
+          <Feather name="log-out" size={20} color={COLORS.danger} />
+        </Pressable>
+      )}
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -150,10 +156,12 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.footer}>
-            <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-              <Feather name="log-out" size={15} color={COLORS.danger} />
-              <Text style={styles.logoutText}>Se déconnecter</Text>
-            </Pressable>
+            {isAdmin && (
+              <Pressable style={styles.logoutBtn} onPress={handleLogout}>
+                <Feather name="log-out" size={15} color={COLORS.danger} />
+                <Text style={styles.logoutText}>Se déconnecter</Text>
+              </Pressable>
+            )}
             <Text style={styles.footerText}>© 2026 LNT Paris · Tous droits réservés</Text>
           </View>
         </View>
@@ -210,6 +218,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  logoutTopRight: {
+    position: "absolute",
+    top: 10,
+    right: 16,
+    zIndex: 10,
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1.5,
+    borderColor: COLORS.danger + "30",
   },
   scrollView: {
     flex: 1,
