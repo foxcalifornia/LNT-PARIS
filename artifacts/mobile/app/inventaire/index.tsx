@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { api, formatPrix, type CollectionWithProduits, type Produit, type Consommable, type MouvementStock, type Boite } from "@/lib/api";
+import { api, formatPrix, type CollectionWithProduits, type Produit, type Consommable, type MouvementStock, type Boite, type Stand, type StandInventoryItem } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const COLORS = Colors.light;
@@ -66,6 +66,25 @@ export default function InventaireScreen() {
     enabled: activeTab === "mouvements",
   });
 
+  const [selectedStandId, setSelectedStandId] = useState<number | null>(null);
+
+  const { data: stands = [] } = useQuery<Stand[]>({
+    queryKey: ["stands"],
+    queryFn: api.stands.getAll,
+  });
+
+  const { data: standInventoryRaw = [], refetch: refetchStandInventory } = useQuery<StandInventoryItem[]>({
+    queryKey: ["standInventory", selectedStandId],
+    queryFn: () => api.stands.getInventory(selectedStandId!),
+    enabled: selectedStandId !== null,
+  });
+
+  const standStockMap = React.useMemo(() => {
+    const map = new Map<number, StandInventoryItem>();
+    standInventoryRaw.forEach((item) => map.set(item.produitId, item));
+    return map;
+  }, [standInventoryRaw]);
+
   const deleteCollectionMutation = useMutation({
     mutationFn: api.inventory.deleteCollection,
     onSuccess: () => {
@@ -90,14 +109,11 @@ export default function InventaireScreen() {
   };
 
   const totalProduits = collections.reduce((sum, c) => sum + c.produits.length, 0);
-  const totalBoutique = collections.reduce(
-    (sum, c) => sum + c.produits.reduce((s, p) => s + p.quantite, 0),
-    0
-  );
   const totalReserve = collections.reduce(
     (sum, c) => sum + c.produits.reduce((s, p) => s + p.stockReserve, 0),
     0
   );
+  const totalStand = Array.from(standStockMap.values()).reduce((s, i) => s + i.stockBoutique, 0);
 
   const alertCount = collections.reduce(
     (sum, c) => sum + c.produits.filter((p) => p.stockMinimum > 0 && p.quantite < p.stockMinimum).length,
@@ -129,9 +145,45 @@ export default function InventaireScreen() {
 
       <View style={styles.statsRow}>
         <StatCard label="Collections" value={collections.length} icon="layers" color={COLORS.accent} />
-        <StatCard label="Boutique" value={totalBoutique} icon="shopping-bag" color={COLORS.success} />
+        {selectedStandId ? (
+          <StatCard
+            label={stands.find(s => s.id === selectedStandId)?.name ?? "Stand"}
+            value={totalStand}
+            icon="map-pin"
+            color="#8B5CF6"
+          />
+        ) : (
+          <StatCard label="Produits" value={totalProduits} icon="tag" color={COLORS.success} />
+        )}
         <StatCard label="Réserve" value={totalReserve} icon="archive" color="#8B5CF6" />
       </View>
+
+      {stands.filter(s => s.isActive).length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.standSelectorRow}
+          style={styles.standSelectorScroll}
+        >
+          <Pressable
+            style={[styles.standChip, selectedStandId === null && styles.standChipActive]}
+            onPress={() => { Haptics.selectionAsync(); setSelectedStandId(null); }}
+          >
+            <Feather name="archive" size={12} color={selectedStandId === null ? "#fff" : COLORS.textSecondary} />
+            <Text style={[styles.standChipText, selectedStandId === null && styles.standChipTextActive]}>Réserve</Text>
+          </Pressable>
+          {stands.filter(s => s.isActive).map(stand => (
+            <Pressable
+              key={stand.id}
+              style={[styles.standChip, selectedStandId === stand.id && styles.standChipActive]}
+              onPress={() => { Haptics.selectionAsync(); setSelectedStandId(stand.id); }}
+            >
+              <Feather name="map-pin" size={12} color={selectedStandId === stand.id ? "#fff" : COLORS.textSecondary} />
+              <Text style={[styles.standChipText, selectedStandId === stand.id && styles.standChipTextActive]}>{stand.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
 
       <View style={styles.tabBar}>
         <Pressable
@@ -214,6 +266,8 @@ export default function InventaireScreen() {
                 onDelete={() => handleDeleteCollection(col.id, col.nom)}
                 onSelectProduit={(p, nom) => setSelectedProduit({ produit: p, collectionNom: nom })}
                 isAdmin={isAdmin}
+                selectedStandId={selectedStandId}
+                standStockMap={standStockMap}
               />
             ))
           )}
@@ -250,7 +304,13 @@ export default function InventaireScreen() {
         produit={selectedProduit?.produit ?? null}
         collectionNom={selectedProduit?.collectionNom ?? ""}
         onClose={() => setSelectedProduit(null)}
-        onSuccess={() => setSelectedProduit(null)}
+        onSuccess={() => {
+          setSelectedProduit(null);
+          if (selectedStandId) refetchStandInventory();
+        }}
+        selectedStandId={selectedStandId}
+        standStock={selectedProduit ? standStockMap.get(selectedProduit.produit.id) ?? null : null}
+        standName={selectedStandId ? (stands.find(s => s.id === selectedStandId)?.name ?? "Stand") : null}
       />
     </View>
   );
@@ -273,9 +333,11 @@ type CollectionCardProps = {
   onDelete: () => void;
   onSelectProduit: (produit: Produit, collectionNom: string) => void;
   isAdmin: boolean;
+  selectedStandId?: number | null;
+  standStockMap?: Map<number, StandInventoryItem>;
 };
 
-function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProduit, isAdmin }: CollectionCardProps) {
+function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProduit, isAdmin, selectedStandId, standStockMap }: CollectionCardProps) {
   const queryClient = useQueryClient();
   const [showAddProduit, setShowAddProduit] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState(collection.imageUrl ?? "");
@@ -284,8 +346,10 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
     setImageUrlInput(collection.imageUrl ?? "");
   }, [collection.imageUrl]);
 
-  const totalBoutique = collection.produits.reduce((s, p) => s + p.quantite, 0);
   const totalReserve = collection.produits.reduce((s, p) => s + p.stockReserve, 0);
+  const totalStandCol = selectedStandId
+    ? collection.produits.reduce((s, p) => s + (standStockMap?.get(p.id)?.stockBoutique ?? 0), 0)
+    : null;
 
   const collectionImageMutation = useMutation({
     mutationFn: (imageUrl: string | null) => api.inventory.updateCollection(collection.id, { imageUrl }),
@@ -348,7 +412,9 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
           <View>
             <Text style={styles.collectionName}>{collection.nom}</Text>
             <Text style={styles.collectionMeta}>
-              {collection.produits.length} produit{collection.produits.length !== 1 ? "s" : ""} · {totalBoutique} boutique · {totalReserve} réserve
+              {collection.produits.length} produit{collection.produits.length !== 1 ? "s" : ""}
+              {totalStandCol !== null ? ` · ${totalStandCol} stand` : ""}
+              {` · ${totalReserve} réserve`}
             </Text>
           </View>
         </View>
@@ -374,6 +440,8 @@ function CollectionCard({ collection, expanded, onToggle, onDelete, onSelectProd
               produit={p}
               onDelete={() => handleDeleteProduit(p.id, p.couleur)}
               onSelect={() => onSelectProduit(p, collection.nom)}
+              standStock={standStockMap?.get(p.id) ?? null}
+              showStand={!!selectedStandId}
             />
           ))}
 
@@ -466,16 +534,17 @@ type ProduitRowProps = {
   produit: Produit;
   onDelete: () => void;
   onSelect: () => void;
+  standStock?: StandInventoryItem | null;
+  showStand?: boolean;
 };
 
-function ProduitRow({ produit, onDelete, onSelect }: ProduitRowProps) {
-  const hasMin = produit.stockMinimum > 0;
-  const belowMin = hasMin && produit.quantite < produit.stockMinimum;
-  const manque = belowMin ? produit.stockMinimum - produit.quantite : 0;
+function ProduitRow({ produit, onDelete, onSelect, standStock, showStand }: ProduitRowProps) {
+  const standQty = standStock?.stockBoutique ?? 0;
+  const standBelowMin = showStand && standStock?.minimumBoutique != null && standStock.minimumBoutique > 0 && standQty < standStock.minimumBoutique;
 
   return (
     <Pressable
-      style={[styles.produitRow, belowMin && styles.produitRowAlert]}
+      style={[styles.produitRow, standBelowMin && styles.produitRowAlert]}
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(); }}
     >
       <View style={[styles.produitDot, { backgroundColor: getColorHex(produit.couleur) }]} />
@@ -485,31 +554,34 @@ function ProduitRow({ produit, onDelete, onSelect }: ProduitRowProps) {
           {produit.prixCentimes > 0 && (
             <Text style={styles.produitPrix}>{formatPrix(produit.prixCentimes)}</Text>
           )}
-          {hasMin && belowMin && (
-            <View style={styles.minBadgeAlert}>
-              <Feather name="alert-triangle" size={9} color="#F59E0B" />
-              <Text style={[styles.minBadgeText, { color: "#F59E0B" }]}>
-                +{manque} requis
-              </Text>
-            </View>
-          )}
         </View>
       </View>
 
       <View style={styles.produitActions}>
         <View style={styles.stockPills}>
-          <View style={styles.stockPillBoutique}>
-            <Text style={styles.stockPillLabel}>B</Text>
-            <Text style={[styles.stockPillValue, { color: produit.quantite === 0 ? COLORS.danger : COLORS.success }]}>
-              {produit.quantite}
-            </Text>
-          </View>
-          <View style={styles.stockPillReserve}>
-            <Text style={[styles.stockPillLabel, { color: "#8B5CF6" }]}>R</Text>
-            <Text style={[styles.stockPillValue, { color: "#8B5CF6" }]}>
-              {produit.stockReserve}
-            </Text>
-          </View>
+          {showStand ? (
+            <>
+              <View style={[styles.stockPillBoutique, { borderColor: "#8B5CF6" + "40" }]}>
+                <Text style={[styles.stockPillLabel, { color: "#8B5CF6" }]}>S</Text>
+                <Text style={[styles.stockPillValue, { color: standQty === 0 ? COLORS.danger : "#8B5CF6" }]}>
+                  {standQty}
+                </Text>
+              </View>
+              <View style={styles.stockPillReserve}>
+                <Text style={[styles.stockPillLabel, { color: COLORS.textSecondary }]}>R</Text>
+                <Text style={[styles.stockPillValue, { color: COLORS.textSecondary }]}>
+                  {produit.stockReserve}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.stockPillReserve}>
+              <Text style={[styles.stockPillLabel, { color: "#8B5CF6" }]}>R</Text>
+              <Text style={[styles.stockPillValue, { color: "#8B5CF6" }]}>
+                {produit.stockReserve}
+              </Text>
+            </View>
+          )}
         </View>
         <Pressable
           style={styles.deleteProduitBtn}
@@ -529,27 +601,27 @@ type ProduitStockSheetProps = {
   collectionNom: string;
   onClose: () => void;
   onSuccess: () => void;
+  selectedStandId?: number | null;
+  standStock?: StandInventoryItem | null;
+  standName?: string | null;
 };
 
-type SheetSection = "transfer" | "boutique" | "reserve" | "minimum" | "prix" | null;
-type TransferDirection = "reserve_to_boutique" | "boutique_to_reserve";
+type SheetSection = "standTransfer" | "reserve" | "minimum" | "prix" | null;
+type StandTransferDirection = "reserve_to_stand" | "stand_to_reserve";
 
-function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess }: ProduitStockSheetProps) {
+function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess, selectedStandId, standStock, standName }: ProduitStockSheetProps) {
   const queryClient = useQueryClient();
   const { isAdmin } = useAuth();
   const { height: screenHeight } = useWindowDimensions();
   const [openSection, setOpenSection] = useState<SheetSection>(null);
   const [inputVal, setInputVal] = useState("");
-  const [transferDirection, setTransferDirection] = useState<TransferDirection>("reserve_to_boutique");
-  const [transferComment, setTransferComment] = useState("");
+  const [standTransferDirection, setStandTransferDirection] = useState<StandTransferDirection>("reserve_to_stand");
   const [imageUrlInput, setImageUrlInput] = useState("");
 
   useEffect(() => {
     if (visible) {
       setOpenSection(null);
       setInputVal("");
-      setTransferDirection("reserve_to_boutique");
-      setTransferComment("");
       setImageUrlInput(produit?.imageUrl ?? "");
     }
   }, [visible, produit?.id]);
@@ -557,22 +629,18 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
   const onMutationSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["collections"] });
     queryClient.invalidateQueries({ queryKey: ["mouvements"] });
+    if (selectedStandId) {
+      queryClient.invalidateQueries({ queryKey: ["standInventory", selectedStandId] });
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setOpenSection(null);
     setInputVal("");
-    setTransferComment("");
     onSuccess();
   };
 
-  const transferMutation = useMutation({
-    mutationFn: ({ qty, direction, commentaire }: { qty: number; direction: TransferDirection; commentaire?: string }) =>
-      api.inventory.transfertStock(produit!.id, { quantite: qty, direction, commentaire }),
-    onSuccess: onMutationSuccess,
-    onError: (err: any) => Alert.alert("Erreur", err.message),
-  });
-
-  const boutiqueMutation = useMutation({
-    mutationFn: (nouvelleQuantite: number) => api.inventory.ajusterBoutique(produit!.id, nouvelleQuantite),
+  const standTransferMutation = useMutation({
+    mutationFn: ({ qty, direction }: { qty: number; direction: StandTransferDirection }) =>
+      api.stands.transfer(selectedStandId!, { produitId: produit!.id, quantite: qty, direction }),
     onSuccess: onMutationSuccess,
     onError: (err: any) => Alert.alert("Erreur", err.message),
   });
@@ -624,10 +692,10 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
 
   if (!produit) return null;
 
+  const standQtyNow = standStock?.stockBoutique ?? 0;
   const hasMin = produit.stockMinimum > 0;
-  const belowMin = hasMin && produit.quantite < produit.stockMinimum;
-  const manque = belowMin ? produit.stockMinimum - produit.quantite : 0;
-  const canTransfer = produit.stockReserve > 0;
+  const belowMin = selectedStandId ? (hasMin && standQtyNow < produit.stockMinimum) : false;
+  const manque = belowMin ? produit.stockMinimum - standQtyNow : 0;
 
   const parsed = parseInt(inputVal) || 0;
 
@@ -635,22 +703,6 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setInputVal(defaultVal);
     setOpenSection(s);
-  };
-
-  const handleTransfer = () => {
-    const maxQty = transferDirection === "reserve_to_boutique" ? produit.stockReserve : produit.quantite;
-    if (parsed <= 0 || parsed > maxQty) return;
-    transferMutation.mutate({ qty: parsed, direction: transferDirection, commentaire: transferComment || undefined });
-  };
-
-  const handleBoutique = () => {
-    if (parsed < 0) return;
-    const delta = parsed - produit.quantite;
-    if (delta > produit.stockReserve) {
-      Alert.alert("Stock réserve insuffisant", `Disponible : ${produit.stockReserve} pièce(s)`);
-      return;
-    }
-    boutiqueMutation.mutate(parsed);
   };
 
   const handleReserve = () => {
@@ -669,7 +721,7 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
     prixMutation.mutate(Math.round(euros * 100));
   };
 
-  const isPending = transferMutation.isPending || boutiqueMutation.isPending || reserveMutation.isPending || minimumMutation.isPending || prixMutation.isPending;
+  const isPending = standTransferMutation.isPending || reserveMutation.isPending || minimumMutation.isPending || prixMutation.isPending;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -692,29 +744,67 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
           </View>
 
           <View style={styles.sheetStockBanner}>
-            <View style={styles.sheetStockBlock}>
-              <Feather name="shopping-bag" size={16} color={produit.quantite === 0 ? COLORS.danger : COLORS.success} />
-              <Text style={styles.sheetStockLabel}>Boutique</Text>
-              <Text style={[styles.sheetStockValue, { color: produit.quantite === 0 ? COLORS.danger : COLORS.success }]}>
-                {produit.quantite}
-              </Text>
-            </View>
-            <View style={styles.sheetStockDivider} />
-            <View style={styles.sheetStockBlock}>
-              <Feather name="archive" size={16} color="#8B5CF6" />
-              <Text style={styles.sheetStockLabel}>Réserve</Text>
-              <Text style={[styles.sheetStockValue, { color: "#8B5CF6" }]}>{produit.stockReserve}</Text>
-            </View>
-            {hasMin && (
+            {selectedStandId && standStock ? (
               <>
-                <View style={styles.sheetStockDivider} />
                 <View style={styles.sheetStockBlock}>
-                  <Feather name="target" size={16} color={belowMin ? "#F59E0B" : COLORS.textSecondary} />
-                  <Text style={styles.sheetStockLabel}>Minimum</Text>
-                  <Text style={[styles.sheetStockValue, { color: belowMin ? "#F59E0B" : COLORS.textSecondary }]}>
-                    {produit.stockMinimum}
+                  <Feather name="map-pin" size={16} color="#8B5CF6" />
+                  <Text style={styles.sheetStockLabel}>{standName ?? "Stand"}</Text>
+                  <Text style={[styles.sheetStockValue, { color: standQtyNow === 0 ? COLORS.danger : "#8B5CF6" }]}>
+                    {standQtyNow}
                   </Text>
                 </View>
+                <View style={styles.sheetStockDivider} />
+                <View style={styles.sheetStockBlock}>
+                  <Feather name="archive" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.sheetStockLabel}>Réserve</Text>
+                  <Text style={[styles.sheetStockValue, { color: COLORS.textSecondary }]}>{produit.stockReserve}</Text>
+                </View>
+                {hasMin && (
+                  <>
+                    <View style={styles.sheetStockDivider} />
+                    <View style={styles.sheetStockBlock}>
+                      <Feather name="target" size={16} color={belowMin ? "#F59E0B" : COLORS.textSecondary} />
+                      <Text style={styles.sheetStockLabel}>Minimum</Text>
+                      <Text style={[styles.sheetStockValue, { color: belowMin ? "#F59E0B" : COLORS.textSecondary }]}>
+                        {produit.stockMinimum}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : selectedStandId ? (
+              <>
+                <View style={styles.sheetStockBlock}>
+                  <Feather name="map-pin" size={16} color="#8B5CF6" />
+                  <Text style={styles.sheetStockLabel}>{standName ?? "Stand"}</Text>
+                  <Text style={[styles.sheetStockValue, { color: COLORS.danger }]}>0</Text>
+                </View>
+                <View style={styles.sheetStockDivider} />
+                <View style={styles.sheetStockBlock}>
+                  <Feather name="archive" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.sheetStockLabel}>Réserve</Text>
+                  <Text style={[styles.sheetStockValue, { color: COLORS.textSecondary }]}>{produit.stockReserve}</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.sheetStockBlock}>
+                  <Feather name="archive" size={16} color="#8B5CF6" />
+                  <Text style={styles.sheetStockLabel}>Réserve</Text>
+                  <Text style={[styles.sheetStockValue, { color: "#8B5CF6" }]}>{produit.stockReserve}</Text>
+                </View>
+                {hasMin && (
+                  <>
+                    <View style={styles.sheetStockDivider} />
+                    <View style={styles.sheetStockBlock}>
+                      <Feather name="target" size={16} color={COLORS.textSecondary} />
+                      <Text style={styles.sheetStockLabel}>Minimum</Text>
+                      <Text style={[styles.sheetStockValue, { color: COLORS.textSecondary }]}>
+                        {produit.stockMinimum}
+                      </Text>
+                    </View>
+                  </>
+                )}
               </>
             )}
           </View>
@@ -723,151 +813,143 @@ function ProduitStockSheet({ visible, produit, collectionNom, onClose, onSuccess
             <View style={styles.sheetAlertBanner}>
               <Feather name="alert-triangle" size={14} color="#F59E0B" />
               <Text style={styles.sheetAlertText}>
-                Il manque <Text style={{ fontFamily: "Inter_700Bold" }}>{manque} pièce{manque > 1 ? "s" : ""}</Text> en boutique
+                Il manque <Text style={{ fontFamily: "Inter_700Bold" }}>{manque} pièce{manque > 1 ? "s" : ""}</Text> au stand
               </Text>
             </View>
           )}
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: screenHeight * 0.92 - 260, marginTop: 4 }} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
-            {/* Transfert bidirectionnel boutique ↔ réserve */}
-            <SheetActionRow
-              icon="repeat"
-              label="Transfert boutique ↔ réserve"
-              color={COLORS.accent}
-              disabled={produit.stockReserve === 0 && produit.quantite === 0}
-              open={openSection === "transfer"}
-              onToggle={() => openSection === "transfer" ? setOpenSection(null) : openSect("transfer", "1")}
-            >
-              {/* Direction toggle */}
-              <View style={styles.transferDirRow}>
-                <Pressable
-                  style={[styles.transferDirBtn, transferDirection === "reserve_to_boutique" && styles.transferDirBtnActive]}
-                  onPress={() => { setTransferDirection("reserve_to_boutique"); setInputVal("1"); }}
-                >
-                  <Feather name="arrow-up-circle" size={14} color={transferDirection === "reserve_to_boutique" ? "#fff" : COLORS.textSecondary} />
-                  <Text style={[styles.transferDirText, transferDirection === "reserve_to_boutique" && { color: "#fff" }]}>
-                    Réserve → Boutique
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.transferDirBtn, transferDirection === "boutique_to_reserve" && { backgroundColor: "#8B5CF6" }]}
-                  onPress={() => { setTransferDirection("boutique_to_reserve"); setInputVal("1"); }}
-                >
-                  <Feather name="arrow-down-circle" size={14} color={transferDirection === "boutique_to_reserve" ? "#fff" : COLORS.textSecondary} />
-                  <Text style={[styles.transferDirText, transferDirection === "boutique_to_reserve" && { color: "#fff" }]}>
-                    Boutique → Réserve
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Qty stepper */}
-              {(() => {
-                const maxQty = transferDirection === "reserve_to_boutique" ? produit.stockReserve : produit.quantite;
-                const afterBoutique = transferDirection === "reserve_to_boutique"
-                  ? produit.quantite + Math.min(parsed, maxQty)
-                  : produit.quantite - Math.min(parsed, maxQty);
-                const afterReserve = transferDirection === "boutique_to_reserve"
-                  ? produit.stockReserve + Math.min(parsed, maxQty)
-                  : produit.stockReserve - Math.min(parsed, maxQty);
-                return (
-                  <>
-                    <View style={styles.sheetInputRow}>
-                      <Pressable
-                        style={[styles.qtyBtnLg, parsed <= 1 && styles.btnDisabled]}
-                        onPress={() => setInputVal(v => String(Math.max(1, parseInt(v) - 1)))}
-                        disabled={parsed <= 1}
-                      >
-                        <Feather name="minus" size={20} color={parsed <= 1 ? COLORS.textSecondary : COLORS.text} />
-                      </Pressable>
-                      <TextInput
-                        style={styles.qtyInputLg}
-                        value={inputVal}
-                        onChangeText={setInputVal}
-                        keyboardType="number-pad"
-                        textAlign="center"
-                        selectTextOnFocus
-                      />
-                      <Pressable
-                        style={[styles.qtyBtnLg, parsed >= maxQty && styles.btnDisabled]}
-                        onPress={() => setInputVal(v => String(Math.min(maxQty, parseInt(v) + 1)))}
-                        disabled={parsed >= maxQty}
-                      >
-                        <Feather name="plus" size={20} color={parsed >= maxQty ? COLORS.textSecondary : COLORS.text} />
-                      </Pressable>
-                    </View>
-                    <Text style={styles.sheetHint}>
-                      Boutique : {produit.quantite} → <Text style={{ color: COLORS.success, fontFamily: "Inter_600SemiBold" }}>{afterBoutique}</Text>
-                      {"  ·  "}
-                      Réserve : {produit.stockReserve} → <Text style={{ color: "#8B5CF6", fontFamily: "Inter_600SemiBold" }}>{afterReserve}</Text>
-                    </Text>
-                    {maxQty === 0 && (
-                      <Text style={[styles.sheetHint, { color: COLORS.danger }]}>
-                        {transferDirection === "reserve_to_boutique" ? "Réserve vide" : "Boutique vide"}
+            {/* Correction stock stand (admin uniquement, stand sélectionné) */}
+            {selectedStandId && (
+              <SheetActionRow
+                icon="map-pin"
+                label={`Corriger stock — ${standName ?? "stand"}`}
+                color="#8B5CF6"
+                disabled={produit.stockReserve === 0 && (standStock?.stockBoutique ?? 0) === 0}
+                disabledHint="Aucun stock disponible (réserve et stand vides)"
+                open={openSection === "standTransfer"}
+                onToggle={() => openSection === "standTransfer" ? setOpenSection(null) : openSect("standTransfer", "1")}
+              >
+                {/* Sélecteur de direction avec libellés explicites */}
+                <View style={styles.transferDirRow}>
+                  <Pressable
+                    style={[styles.transferDirBtn, standTransferDirection === "reserve_to_stand" && { backgroundColor: "#8B5CF6", borderColor: "#8B5CF6" }]}
+                    onPress={() => { setStandTransferDirection("reserve_to_stand"); setInputVal("1"); }}
+                  >
+                    <Feather name="plus-circle" size={14} color={standTransferDirection === "reserve_to_stand" ? "#fff" : COLORS.textSecondary} />
+                    <View>
+                      <Text style={[styles.transferDirText, standTransferDirection === "reserve_to_stand" && { color: "#fff" }]}>
+                        Ajouter au stand
                       </Text>
-                    )}
-                  </>
-                );
-              })()}
-
-              {/* Commentaire transfert */}
-              <TextInput
-                style={[styles.sheetTextInput, { marginTop: 8 }]}
-                value={transferComment}
-                onChangeText={setTransferComment}
-                placeholder="Commentaire (optionnel)"
-                placeholderTextColor={COLORS.textSecondary}
-              />
-
-              <Pressable
-                style={[styles.sheetActionBtn, { backgroundColor: COLORS.accent }, (isPending || parsed <= 0 || parsed > (transferDirection === "reserve_to_boutique" ? produit.stockReserve : produit.quantite)) && styles.btnDisabled]}
-                onPress={handleTransfer}
-                disabled={isPending || parsed <= 0 || parsed > (transferDirection === "reserve_to_boutique" ? produit.stockReserve : produit.quantite)}
-              >
-                {transferMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Feather name="repeat" size={15} color="#fff" />
-                    <Text style={styles.sheetActionBtnText}>Transférer</Text>
-                  </>
-                )}
-              </Pressable>
-            </SheetActionRow>
-
-            <SheetActionRow
-              icon="shopping-bag"
-              label="Corriger stock boutique"
-              color={COLORS.success}
-              open={openSection === "boutique"}
-              onToggle={() => openSection === "boutique" ? setOpenSection(null) : openSect("boutique", String(produit.quantite))}
-            >
-              <TextInput
-                style={styles.sheetTextInput}
-                value={inputVal}
-                onChangeText={setInputVal}
-                keyboardType="number-pad"
-                placeholder="Nouvelle quantité boutique"
-                placeholderTextColor={COLORS.textSecondary}
-                selectTextOnFocus
-              />
-              {parsed > produit.quantite && (
-                <Text style={styles.sheetHint}>
-                  Augmentation de {parsed - produit.quantite} → déduit de la réserve ({produit.stockReserve} dispo)
-                </Text>
-              )}
-              {parsed < produit.quantite && (
-                <Text style={[styles.sheetHint, { color: "#F59E0B" }]}>
-                  Correction de -{produit.quantite - parsed} pièce(s) (perte / inventaire)
-                </Text>
-              )}
-              <Pressable
-                style={[styles.sheetActionBtn, { backgroundColor: COLORS.success }, (isPending || parsed < 0 || isNaN(parsed)) && styles.btnDisabled]}
-                onPress={handleBoutique}
-                disabled={isPending || isNaN(parsed) || parsed < 0}
-              >
-                {boutiqueMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sheetActionBtnText}>Enregistrer</Text>}
-              </Pressable>
-            </SheetActionRow>
+                      <Text style={[styles.transferDirSubtext, standTransferDirection === "reserve_to_stand" && { color: "#ffffff99" }]}>
+                        prélevé sur la réserve
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.transferDirBtn, standTransferDirection === "stand_to_reserve" && { backgroundColor: "#8B5CF6", borderColor: "#8B5CF6" }]}
+                    onPress={() => { setStandTransferDirection("stand_to_reserve"); setInputVal("1"); }}
+                  >
+                    <Feather name="minus-circle" size={14} color={standTransferDirection === "stand_to_reserve" ? "#fff" : COLORS.textSecondary} />
+                    <View>
+                      <Text style={[styles.transferDirText, standTransferDirection === "stand_to_reserve" && { color: "#fff" }]}>
+                        Retirer du stand
+                      </Text>
+                      <Text style={[styles.transferDirSubtext, standTransferDirection === "stand_to_reserve" && { color: "#ffffff99" }]}>
+                        ajouté à la réserve
+                      </Text>
+                    </View>
+                  </Pressable>
+                </View>
+                {(() => {
+                  const standQtyCurrent = standStock?.stockBoutique ?? 0;
+                  const standMaxQty = standTransferDirection === "reserve_to_stand" ? produit.stockReserve : standQtyCurrent;
+                  const parsedStand = parseInt(inputVal) || 0;
+                  const clampedQty = Math.min(parsedStand, standMaxQty);
+                  const newStand = standTransferDirection === "reserve_to_stand"
+                    ? standQtyCurrent + clampedQty
+                    : standQtyCurrent - clampedQty;
+                  const newReserve = standTransferDirection === "reserve_to_stand"
+                    ? produit.stockReserve - clampedQty
+                    : produit.stockReserve + clampedQty;
+                  return (
+                    <>
+                      <View style={styles.sheetInputRow}>
+                        <Pressable
+                          style={[styles.qtyBtnLg, parsedStand <= 1 && styles.btnDisabled]}
+                          onPress={() => setInputVal(v => String(Math.max(1, parseInt(v) - 1)))}
+                          disabled={parsedStand <= 1}
+                        >
+                          <Feather name="minus" size={20} color={parsedStand <= 1 ? COLORS.textSecondary : COLORS.text} />
+                        </Pressable>
+                        <TextInput
+                          style={styles.qtyInputLg}
+                          value={inputVal}
+                          onChangeText={setInputVal}
+                          keyboardType="number-pad"
+                          textAlign="center"
+                          selectTextOnFocus
+                        />
+                        <Pressable
+                          style={[styles.qtyBtnLg, parsedStand >= standMaxQty && styles.btnDisabled]}
+                          onPress={() => setInputVal(v => String(Math.min(standMaxQty, parseInt(v) + 1)))}
+                          disabled={parsedStand >= standMaxQty}
+                        >
+                          <Feather name="plus" size={20} color={parsedStand >= standMaxQty ? COLORS.textSecondary : COLORS.text} />
+                        </Pressable>
+                      </View>
+                      {/* Aperçu du résultat */}
+                      <View style={styles.transferPreviewRow}>
+                        <View style={styles.transferPreviewBlock}>
+                          <Feather name="map-pin" size={12} color="#8B5CF6" />
+                          <Text style={styles.transferPreviewLabel}>Stand</Text>
+                          <Text style={styles.transferPreviewFrom}>{standQtyCurrent}</Text>
+                          <Feather name="arrow-right" size={12} color="#8B5CF6" />
+                          <Text style={[styles.transferPreviewTo, { color: "#8B5CF6" }]}>{newStand}</Text>
+                        </View>
+                        <View style={styles.transferPreviewDivider} />
+                        <View style={styles.transferPreviewBlock}>
+                          <Feather name="archive" size={12} color={COLORS.textSecondary} />
+                          <Text style={styles.transferPreviewLabel}>Réserve</Text>
+                          <Text style={styles.transferPreviewFrom}>{produit.stockReserve}</Text>
+                          <Feather name="arrow-right" size={12} color={COLORS.textSecondary} />
+                          <Text style={[styles.transferPreviewTo, { color: COLORS.textSecondary }]}>{newReserve}</Text>
+                        </View>
+                      </View>
+                      {standMaxQty === 0 && (
+                        <Text style={[styles.sheetHint, { color: COLORS.danger, marginTop: 4 }]}>
+                          {standTransferDirection === "reserve_to_stand" ? "Réserve vide — impossible d'approvisionner" : "Stand vide — rien à retirer"}
+                        </Text>
+                      )}
+                    </>
+                  );
+                })()}
+                <Pressable
+                  style={[styles.sheetActionBtn, { backgroundColor: "#8B5CF6" },
+                    (isPending || (parseInt(inputVal) || 0) <= 0 || (parseInt(inputVal) || 0) > (standTransferDirection === "reserve_to_stand" ? produit.stockReserve : standStock?.stockBoutique ?? 0)) && styles.btnDisabled
+                  ]}
+                  onPress={() => {
+                    const qty = parseInt(inputVal) || 0;
+                    if (qty <= 0) return;
+                    standTransferMutation.mutate({ qty, direction: standTransferDirection });
+                  }}
+                  disabled={isPending || (parseInt(inputVal) || 0) <= 0 || (parseInt(inputVal) || 0) > (standTransferDirection === "reserve_to_stand" ? produit.stockReserve : standStock?.stockBoutique ?? 0)}
+                >
+                  {standTransferMutation.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="check" size={15} color="#fff" />
+                      <Text style={styles.sheetActionBtnText}>
+                        {standTransferDirection === "reserve_to_stand"
+                          ? `Ajouter au stand (−${Math.min(parseInt(inputVal) || 0, produit.stockReserve)} réserve)`
+                          : `Retirer du stand (+${Math.min(parseInt(inputVal) || 0, standStock?.stockBoutique ?? 0)} réserve)`}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </SheetActionRow>
+            )}
 
             <SheetActionRow
               icon="archive"
@@ -1142,9 +1224,9 @@ function AlertesView({
 }
 
 function AlertRow({ produit, onSelect }: { produit: Produit & { collectionNom: string }; onSelect: () => void }) {
-  const manque = Math.max(0, produit.stockMinimum - produit.quantite);
+  const manque = Math.max(0, produit.stockMinimum - produit.stockReserve);
   const belowMin = manque > 0;
-  const pct = Math.min(100, produit.stockMinimum > 0 ? (produit.quantite / produit.stockMinimum) * 100 : 100);
+  const pct = Math.min(100, produit.stockMinimum > 0 ? (produit.stockReserve / produit.stockMinimum) * 100 : 100);
 
   return (
     <View style={[styles.alertRow, belowMin && styles.alertRowKo]}>
@@ -1170,15 +1252,10 @@ function AlertRow({ produit, onSelect }: { produit: Produit & { collectionNom: s
 
       <View style={styles.alertStockRow}>
         <View style={styles.alertStockItem}>
-          <Text style={styles.alertStockLabel}>Boutique</Text>
-          <Text style={[styles.alertStockValue, { color: belowMin ? COLORS.danger : COLORS.success }]}>
-            {produit.quantite}
-          </Text>
-        </View>
-        <View style={styles.alertStockDivider} />
-        <View style={styles.alertStockItem}>
           <Text style={styles.alertStockLabel}>Réserve</Text>
-          <Text style={[styles.alertStockValue, { color: "#8B5CF6" }]}>{produit.stockReserve}</Text>
+          <Text style={[styles.alertStockValue, { color: belowMin ? COLORS.danger : COLORS.success }]}>
+            {produit.stockReserve}
+          </Text>
         </View>
         <View style={styles.alertStockDivider} />
         <View style={styles.alertStockItem}>
@@ -1202,7 +1279,7 @@ function AlertRow({ produit, onSelect }: { produit: Produit & { collectionNom: s
           ]}
         />
       </View>
-      <Text style={styles.alertProgressLabel}>{Math.round(pct)}% du minimum boutique</Text>
+      <Text style={styles.alertProgressLabel}>{Math.round(pct)}% du minimum</Text>
 
       <Pressable
         style={styles.alertReapproBtn}
@@ -1955,6 +2032,38 @@ const styles = StyleSheet.create({
     fontSize: 10, fontFamily: "Inter_500Medium",
     color: COLORS.textSecondary, textAlign: "center",
   },
+  standSelectorScroll: {
+    maxHeight: 44,
+  },
+  standSelectorRow: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  standChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  standChipActive: {
+    backgroundColor: "#8B5CF6",
+    borderColor: "#8B5CF6",
+  },
+  standChipText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.textSecondary,
+  },
+  standChipTextActive: {
+    color: "#fff",
+  },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyState: {
     flex: 1, alignItems: "center", justifyContent: "center",
@@ -2581,6 +2690,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: COLORS.textSecondary,
+  },
+  transferDirSubtext: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  transferPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  transferPreviewBlock: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  transferPreviewDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: COLORS.border,
+  },
+  transferPreviewLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    color: COLORS.textSecondary,
+  },
+  transferPreviewFrom: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: COLORS.text,
+  },
+  transferPreviewTo: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
   },
   sheetActionBtnRow: {
     flexDirection: "row",
