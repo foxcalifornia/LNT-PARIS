@@ -41,13 +41,15 @@ type Props = {
   onClose: () => void;
   onVente: (items: { produitId: number; quantite: number }[], paymentMode: "cash" | "carte", opts?: VenteOpts) => Promise<void>;
   onRefreshAfterVente: () => Promise<void>;
+  standStockMap?: Map<number, number>;
 };
 
-export function PanierModal({ visible, cart, collections, onCartChange, onClose, onVente, onRefreshAfterVente }: Props) {
+export function PanierModal({ visible, cart, collections, onCartChange, onClose, onVente, onRefreshAfterVente, standStockMap }: Props) {
   const insets = useSafeAreaInsets();
   const { promoEnabled } = useSettings();
   const { isTablet } = useResponsive();
   const { standId } = useAuth();
+  const getMaxQty = (produit: Produit) => standStockMap ? (standStockMap.get(produit.id) ?? 0) : produit.quantite;
   const [editingProduitId, setEditingProduitId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -139,7 +141,8 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
           stopPolling();
           try {
             const opts: VenteOpts = {};
-            if (remiseCentimes > 0) { opts.remiseCentimes = remiseCentimes; opts.remiseType = remiseType; }
+            const totalRemiseCentimes = promo.discountCentimes + remiseCentimes;
+            if (totalRemiseCentimes > 0) { opts.remiseCentimes = totalRemiseCentimes; opts.remiseType = remiseCentimes > 0 ? remiseType : "promo"; }
             if (commentaire.trim()) opts.commentaire = commentaire.trim();
             await api.payments.confirm({
               saleReference: ref,
@@ -217,12 +220,13 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             setSplitRef2(ref);
             setSplitState("confirming");
             try {
+              const totalRemiseMulti = promo.discountCentimes + remiseCentimes;
               await api.payments.confirmMulti({
                 saleRef1: splitRef1!,
                 saleRef2: ref,
                 items: cartSnapshotRef.current.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })),
                 standId,
-                ...(remiseCentimes > 0 ? { remiseCentimes, remiseType } : {}),
+                ...(totalRemiseMulti > 0 ? { remiseCentimes: totalRemiseMulti, remiseType: remiseCentimes > 0 ? remiseType : "promo" } : {}),
                 ...(commentaire.trim() ? { commentaire: commentaire.trim() } : {}),
               });
               await onRefreshAfterVente();
@@ -351,7 +355,8 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     setTerminalState("creating");
     try {
       const opts: VenteOpts = {};
-      if (remiseCentimes > 0) { opts.remiseCentimes = remiseCentimes; opts.remiseType = remiseType; }
+      const totalRemiseCentimes = promo.discountCentimes + remiseCentimes;
+      if (totalRemiseCentimes > 0) { opts.remiseCentimes = totalRemiseCentimes; opts.remiseType = remiseCentimes > 0 ? remiseType : "promo"; }
       if (commentaire.trim()) opts.commentaire = commentaire.trim();
       await api.payments.confirm({
         saleReference,
@@ -394,7 +399,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     if (!item) return;
     const next = item.quantite + delta;
     if (next <= 0) { confirmDelete(produitId); return; }
-    const capped = Math.min(next, item.produit.quantite);
+    const capped = Math.min(next, getMaxQty(item.produit));
     onCartChange(cart.map((i) => i.produit.id === produitId ? { ...i, quantite: capped } : i));
   };
 
@@ -420,10 +425,10 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     const alreadyInCart = cart.find((i) => i.produit.id === newProduit.id);
     let newCart: CartItem[];
     if (alreadyInCart) {
-      const merged = Math.min(alreadyInCart.quantite + oldItem.quantite, newProduit.quantite);
+      const merged = Math.min(alreadyInCart.quantite + oldItem.quantite, getMaxQty(newProduit));
       newCart = cart.filter((i) => i.produit.id !== oldProduitId).map((i) => i.produit.id === newProduit.id ? { ...i, quantite: merged } : i);
     } else {
-      const qty = Math.min(oldItem.quantite, newProduit.quantite);
+      const qty = Math.min(oldItem.quantite, getMaxQty(newProduit));
       newCart = cart.filter((i) => i.produit.id !== oldProduitId).concat([{ produit: newProduit, quantite: qty }]);
     }
     onCartChange(newCart);
@@ -798,7 +803,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                   const freeCount = promo.freeDetails.find((f) => f.produitId === item.produit.id)?.count ?? 0;
                   const collection = collections.find((c) => c.nom === item.produit.collectionNom);
                   const otherVariants = collection
-                    ? collection.produits.filter((p) => p.id !== item.produit.id && p.quantite > 0)
+                    ? collection.produits.filter((p) => p.id !== item.produit.id && getMaxQty(p) > 0)
                     : [];
 
                   return (
@@ -829,14 +834,14 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                             </Pressable>
                             <Text style={styles.qtyVal}>{item.quantite}</Text>
                             <Pressable
-                              style={[styles.qtyBtn, item.quantite >= item.produit.quantite && styles.qtyBtnDisabled]}
+                              style={[styles.qtyBtn, item.quantite >= getMaxQty(item.produit) && styles.qtyBtnDisabled]}
                               onPress={() => updateQty(item.produit.id, +1)}
-                              disabled={item.quantite >= item.produit.quantite}
+                              disabled={item.quantite >= getMaxQty(item.produit)}
                             >
                               <Feather
                                 name="plus"
                                 size={14}
-                                color={item.quantite >= item.produit.quantite ? COLORS.border : COLORS.text}
+                                color={item.quantite >= getMaxQty(item.produit) ? COLORS.border : COLORS.text}
                               />
                             </Pressable>
                           </View>
@@ -876,7 +881,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
                               <View style={[styles.variantColorDot, { backgroundColor: getColorHex(p.couleur) }]} />
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.variantCouleur}>{p.couleur}</Text>
-                                <Text style={styles.variantStock}>{p.quantite} en stock</Text>
+                                <Text style={styles.variantStock}>{getMaxQty(p)} en stock</Text>
                               </View>
                               <Text style={styles.variantPrix}>{formatPrix(p.prixCentimes)}</Text>
                               <Feather name="chevron-right" size={16} color={COLORS.textSecondary} />
