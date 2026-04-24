@@ -153,7 +153,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
             await onRefreshAfterVente();
             setTerminalState("paid");
             setSuccessMode("carte");
-            setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
+            setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: promo.discountCentimes + remiseCentimes, commentaire: commentaire.trim() });
             setSuccess(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTimeout(() => {
@@ -231,7 +231,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
               });
               await onRefreshAfterVente();
               setSuccessMode("carte");
-              setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
+              setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: promo.discountCentimes + remiseCentimes, commentaire: commentaire.trim() });
               setSuccess(true);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               setTimeout(() => {
@@ -302,11 +302,12 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
     setLoading(true);
     try {
       const opts: VenteOpts = {};
-      if (remiseCentimes > 0) { opts.remiseCentimes = remiseCentimes; opts.remiseType = remiseType; }
+      const totalRemiseCentimes = promo.discountCentimes + remiseCentimes;
+      if (totalRemiseCentimes > 0) { opts.remiseCentimes = totalRemiseCentimes; opts.remiseType = remiseCentimes > 0 ? remiseType : "promo"; }
       if (commentaire.trim()) opts.commentaire = commentaire.trim();
       await onVente(cart.map((i) => ({ produitId: i.produit.id, quantite: i.quantite })), "cash", opts);
       setSuccessMode("cash");
-      setSuccessSnapshot({ items: totalItems, total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
+      setSuccessSnapshot({ items: totalItems, total: totalFinal, remise: totalRemiseCentimes, commentaire: commentaire.trim() });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -368,7 +369,7 @@ export function PanierModal({ visible, cart, collections, onCartChange, onClose,
       await onRefreshAfterVente();
       setTerminalState("paid");
       setSuccessMode("carte");
-      setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: remiseCentimes, commentaire: commentaire.trim() });
+      setSuccessSnapshot({ items: cartTotalItems(cartSnapshotRef.current), total: totalFinal, remise: promo.discountCentimes + remiseCentimes, commentaire: commentaire.trim() });
       setSuccess(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setTimeout(() => {
