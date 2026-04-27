@@ -305,14 +305,38 @@ router.post("/confirm", async (req, res) => {
     }
 
     let totalArticles = 0;
-    const remiseTotale = remiseCentimes ?? 0;
     const nbItems = items.reduce((s, i) => s + i.quantite, 0);
 
+    // Pre-fetch all products to compute the gross total
+    const produitMap = new Map<number, { quantite: number; prixCentimes: number; stockReserve: number }>();
     for (const item of items) {
       const [produit] = await db
         .select({ quantite: produitsTable.quantite, prixCentimes: produitsTable.prixCentimes, stockReserve: produitsTable.stockReserve })
         .from(produitsTable)
         .where(eq(produitsTable.id, item.produitId));
+      if (produit) produitMap.set(item.produitId, produit);
+    }
+
+    // Compute gross total from catalogue prices
+    const brutTotal = items.reduce((s, i) => {
+      const p = produitMap.get(i.produitId);
+      return s + (p ? p.prixCentimes * i.quantite : 0);
+    }, 0);
+
+    // SumUp checkout amount is the ground truth for what was actually paid.
+    // Use it to derive the real total remise (covers promo + manual discounts
+    // even if the mobile app forgot to include the promo in remiseCentimes).
+    const checkoutMontant = record.montantCentimes;
+    const computedRemise = Math.max(0, brutTotal - checkoutMontant);
+    const remiseTotale = Math.max(computedRemise, remiseCentimes ?? 0);
+
+    // Determine effective remise type
+    const effectiveRemiseType = remiseTotale > 0
+      ? (remiseTotale > (remiseCentimes ?? 0) ? "promo" : (remiseType ?? "promo"))
+      : null;
+
+    for (const item of items) {
+      const produit = produitMap.get(item.produitId);
 
       if (!produit) continue;
 
@@ -327,7 +351,7 @@ router.post("/confirm", async (req, res) => {
         typePaiement: "CARTE",
         montantCentimes,
         remiseCentimes: remiseItem,
-        remiseType: remiseType ?? null,
+        remiseType: effectiveRemiseType,
         commentaire: commentaire ?? null,
         groupKey: groupKey ?? null,
         saleReference,
@@ -407,15 +431,33 @@ router.post("/confirm-multi", async (req, res) => {
       return;
     }
 
-    const remiseTotale = remiseCentimes ?? 0;
     const nbItems = items.reduce((s, i) => s + i.quantite, 0);
     let totalArticles = 0;
 
+    // Pre-fetch all products to compute the gross total
+    const produitMapMulti = new Map<number, { quantite: number; prixCentimes: number; stockReserve: number }>();
     for (const item of items) {
       const [produit] = await db
         .select({ quantite: produitsTable.quantite, prixCentimes: produitsTable.prixCentimes, stockReserve: produitsTable.stockReserve })
         .from(produitsTable)
         .where(eq(produitsTable.id, item.produitId));
+      if (produit) produitMapMulti.set(item.produitId, produit);
+    }
+
+    // SumUp ground truth: total paid = sum of both checkout amounts
+    const brutTotalMulti = items.reduce((s, i) => {
+      const p = produitMapMulti.get(i.produitId);
+      return s + (p ? p.prixCentimes * i.quantite : 0);
+    }, 0);
+    const checkoutTotalMulti = rec1.montantCentimes + rec2.montantCentimes;
+    const computedRemiseMulti = Math.max(0, brutTotalMulti - checkoutTotalMulti);
+    const remiseTotale = Math.max(computedRemiseMulti, remiseCentimes ?? 0);
+    const effectiveRemiseTypeMulti = remiseTotale > 0
+      ? (remiseTotale > (remiseCentimes ?? 0) ? "promo" : (remiseType ?? "promo"))
+      : null;
+
+    for (const item of items) {
+      const produit = produitMapMulti.get(item.produitId);
 
       if (!produit) continue;
 
@@ -431,7 +473,7 @@ router.post("/confirm-multi", async (req, res) => {
         montantCentimes,
         montantCarteCentimes: montantCentimes,
         remiseCentimes: remiseItem,
-        remiseType: remiseType ?? null,
+        remiseType: effectiveRemiseTypeMulti,
         commentaire: commentaire ?? null,
         saleReference: saleRef1,
         standId: standId ?? null,
